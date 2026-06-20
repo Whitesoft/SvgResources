@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Material Symbols 图标浏览 · Lumos SVG</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --panel: #ffffff;
+    --border: #e4e4e7;
+    --muted: #71717a;
+    --text: #18181b;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --hover: #f4f4f5;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    overflow: hidden;
+  }
+  .app {
+    display: grid;
+    grid-template-rows: 56px 1fr;
+    grid-template-columns: 260px 1fr;
+    grid-template-areas:
+      "header header"
+      "sidebar main";
+    height: 100vh;
+  }
+  header {
+    grid-area: header;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 20px;
+    box-shadow: var(--shadow);
+    z-index: 10;
+  }
+  header h1 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+    white-space: nowrap;
+  }
+  header .stats {
+    color: var(--muted);
+    font-size: 12px;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  .search-wrap {
+    flex: 1;
+    max-width: 480px;
+    position: relative;
+  }
+  .search-wrap input {
+    width: 100%;
+    height: 32px;
+    padding: 0 12px 0 32px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+    background: var(--bg);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .search-wrap input:focus {
+    border-color: var(--accent);
+    background: var(--panel);
+  }
+  .search-wrap::before {
+    content: "";
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 14px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='7'/><path d='m21 21-4.3-4.3'/></svg>");
+    background-size: contain;
+    background-repeat: no-repeat;
+    pointer-events: none;
+  }
+  .variant-switch {
+    display: flex;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .variant-switch button {
+    border: 0;
+    background: transparent;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .variant-switch button.active {
+    background: var(--accent);
+    color: white;
+  }
+  aside {
+    grid-area: sidebar;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  aside .group-label {
+    padding: 8px 16px 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  aside button.cat {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: transparent;
+    border: 0;
+    text-align: left;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+    transition: background 0.1s;
+  }
+  aside button.cat:hover { background: var(--hover); }
+  aside button.cat.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+    border-left: 3px solid var(--accent);
+    padding-left: 13px;
+  }
+  aside button.cat .count {
+    color: var(--muted);
+    font-size: 11px;
+    background: var(--hover);
+    padding: 1px 6px;
+    border-radius: 10px;
+  }
+  aside button.cat.active .count {
+    background: white;
+    color: var(--accent);
+  }
+  main {
+    grid-area: main;
+    overflow-y: auto;
+    padding: 20px;
+    position: relative;
+  }
+  .alphabet-bar {
+    background: transparent;
+    padding: 0;
+    z-index: 5;
+    display: none;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 28px;
+  }
+  .alphabet-bar.visible { display: flex; }
+  .alphabet-bar button {
+    min-width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0 8px;
+    transition: all 0.1s;
+  }
+  .alphabet-bar button:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+  .section-title {
+    margin: 8px 0 16px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .section-title strong {
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 600;
+    margin-right: 8px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 8px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 6px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.12s;
+    min-height: 108px;
+    scroll-margin-top: calc(var(--sticky-h, 60px) + 8px);
+  }
+  .card:hover {
+    border-color: var(--accent);
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+  }
+  .card .icon-frame {
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card .icon-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .card .icon-frame .placeholder {
+    width: 56px;
+    height: 56px;
+  }
+  .card .name {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    word-break: break-all;
+    line-height: 1.3;
+    max-height: 28px;
+    overflow: hidden;
+    width: 100%;
+  }
+  .card.both .icon-frame {
+    width: 72px;
+    gap: 4px;
+    flex-direction: row;
+  }
+  .card.both .icon-frame img,
+  .card.both .icon-frame .placeholder {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+  }
+  .empty {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--muted);
+  }
+  /* 详情条与字母索引共同的 sticky 容器，滚动时一起冻结 */
+  .sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--bg);
+    padding: 8px 0 12px;
+  }
+  .sticky-top:has(.detail-row:not([style*="display: none"])) {
+    padding-top: 12px;
+  }
+  /* 点击图标后的详情条（独立 sticky 元素，滚动时冻结在顶部） */
+  .detail-row {
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 20px;
+    margin-top: 8px;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    box-shadow: var(--shadow);
+    animation: slideDown 0.16s ease-out;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .detail-row .preview {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .detail-row .preview img {
+    width: 56px;
+    height: 56px;
+    object-fit: contain;
+  }
+  .detail-row .info { flex: 1; min-width: 0; }
+  .detail-row .info .name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+    word-break: break-all;
+  }
+  .detail-row .info .files {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 10px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  .detail-row .info .cat-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .detail-row .cats {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .detail-row .cat-chip {
+    padding: 4px 10px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 12px;
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.12s;
+  }
+  .detail-row .cat-chip:hover {
+    background: var(--accent);
+    color: white;
+  }
+  .detail-row .close {
+    background: transparent;
+    border: 0;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .detail-row .close:hover { background: var(--hover); color: var(--text); }
+  .detail-row .copy-btn {
+    padding: 4px 10px;
+    background: var(--hover);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .detail-row .copy-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  /* 滚动条 */
+  aside::-webkit-scrollbar, main::-webkit-scrollbar { width: 8px; }
+  aside::-webkit-scrollbar-thumb, main::-webkit-scrollbar-thumb {
+    background: #d4d4d8;
+    border-radius: 4px;
+  }
+  aside::-webkit-scrollbar-thumb:hover, main::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+
+  /* 切换为暗色图标的描边变体显示得更柔和 */
+  img.is-outline { opacity: 0.85; }
+
+  /* 顶部加载提示 */
+  .loading {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    padding: 8px;
+    text-align: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12px;
+    z-index: 20;
+    display: none;
+  }
+  .loading.visible { display: block; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Material Symbols 图标库</h1>
+    <div class="search-wrap">
+      <input id="search" type="search" placeholder="搜索图标名称（如 add, camera, arrow）..." autocomplete="off">
+    </div>
+    <div class="variant-switch" id="variantSwitch">
+      <button data-variant="filled" class="active">填充</button>
+      <button data-variant="outline">描边</button>
+      <button data-variant="both">双形态</button>
+    </div>
+    <div class="stats" id="stats">加载中...</div>
+  </header>
+
+  <aside id="sidebar">
+    <div class="group-label">浏览方式</div>
+    <button class="cat active" data-mode="all" data-name="全部">
+      <span>🌐 全部图标</span>
+      <span class="count" id="cnt-all">0</span>
+    </button>
+    <div class="group-label">主题分类</div>
+    <div id="catList"></div>
+  </aside>
+
+  <main id="main">
+    <div class="sticky-top" id="stickyTop">
+      <div class="alphabet-bar" id="alphabetBar"></div>
+      <div class="detail-row" id="detailBar" style="display:none;"></div>
+    </div>
+    <div class="section-title"><strong id="curTitle">全部</strong><span id="curCount"></span></div>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty" style="display:none;">无匹配图标</div>
+  </main>
+</div>
+<div class="loading" id="loadingTip">正在加载图标数据...</div>
+
+<script>
+"use strict";
+
+const DATA_URL = "icons.json";
+const PLACEHOLDER_SVG = "data:image/svg+xml;utf8," + encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' fill='#f4f4f5'/></svg>"
+);
+
+const state = {
+  data: null,
+  mode: "all",       // "all" | "category:<name>"
+  variant: "filled", // "filled" | "outline" | "both"
+  query: "",
+  filtered: [],
+};
+
+const el = {
+  search: document.getElementById("search"),
+  variantSwitch: document.getElementById("variantSwitch"),
+  stats: document.getElementById("stats"),
+  sidebar: document.getElementById("sidebar"),
+  catList: document.getElementById("catList"),
+  main: document.getElementById("main"),
+  grid: document.getElementById("grid"),
+  alphabetBar: document.getElementById("alphabetBar"),
+  curTitle: document.getElementById("curTitle"),
+  curCount: document.getElementById("curCount"),
+  empty: document.getElementById("empty"),
+  loading: document.getElementById("loadingTip"),
+  cntAll: document.getElementById("cnt-all"),
+};
+
+// ============================================================
+// 懒加载：使用 IntersectionObserver，仅当卡片进入视口时填充 <img>
+// ============================================================
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    const card = e.target;
+    if (card.dataset.loaded === "1") continue;
+    card.dataset.loaded = "1";
+    fillCard(card);
+    io.unobserve(card);
+  }
+}, { rootMargin: "200px 0px", threshold: 0.01 });
+
+function fillCard(card) {
+  const name = card.dataset.name;
+  const filled = card.dataset.filled === "1";
+  const outline = card.dataset.outline === "1";
+  const variant = state.variant;
+  const frame = card.querySelector(".icon-frame");
+  frame.innerHTML = "";
+
+  function makeImg(file, isOutline) {
+    const img = document.createElement("img");
+    img.src = file;
+    img.alt = name;
+    img.title = name;
+    img.loading = "lazy";
+    img.decoding = "async";
+    if (isOutline) img.classList.add("is-outline");
+    return img;
+  }
+
+  if (variant === "filled" && filled) {
+    frame.appendChild(makeImg(card.dataset.filledFile, false));
+  } else if (variant === "outline" && outline) {
+    frame.appendChild(makeImg(card.dataset.outlineFile, true));
+  } else if (variant === "both") {
+    if (filled) frame.appendChild(makeImg(card.dataset.filledFile, false));
+    if (outline) frame.appendChild(makeImg(card.dataset.outlineFile, true));
+    if (!filled && !outline) frame.appendChild(makeImg(card.dataset.filledFile || card.dataset.outlineFile, false));
+  } else {
+    // 当前变体不可用时回退到另一个
+    const file = card.dataset.filledFile || card.dataset.outlineFile;
+    if (file) frame.appendChild(makeImg(file, variant === "outline"));
+  }
+}
+
+// ============================================================
+// 渲染当前结果集
+// ============================================================
+function applyFilter() {
+  const q = state.query.trim().toLowerCase();
+  let items;
+  if (state.mode === "all") {
+    items = state.data.all;
+  } else {
+    const catName = state.mode.split(":")[1];
+    const cat = state.data.categories.find(c => c.name === catName);
+    items = cat ? cat.items : [];
+  }
+  if (q) {
+    items = items.filter(it => it.name.indexOf(q) !== -1);
+  }
+  state.filtered = items;
+  renderGrid(items);
+  updateAlphabetBar(items, q);
+}
+
+function renderGrid(items) {
+  // 重建 grid，断开 io 的旧监听
+  io.disconnect();
+  closeDetail();
+  el.grid.innerHTML = "";
+  el.curCount.textContent = `${items.length} 个图标`;
+  el.empty.style.display = items.length === 0 ? "block" : "none";
+  if (items.length === 0) return;
+
+  // 使用 DocumentFragment 批量插入
+  const frag = document.createDocumentFragment();
+  for (const it of items) {
+    const card = document.createElement("div");
+    card.className = "card";
+    if (state.variant === "both") card.classList.add("both");
+    card.dataset.name = it.name;
+    card.dataset.filled = it.filled ? "1" : "0";
+    card.dataset.outline = it.outline ? "1" : "0";
+    card.dataset.filledFile = it.filled || "";
+    card.dataset.outlineFile = it.outline || "";
+    card.dataset.loaded = "0";
+    card.title = it.name + (it.filled ? "" : " (仅描边)") + (it.outline ? "" : " (仅填充)");
+
+    const frame = document.createElement("div");
+    frame.className = "icon-frame";
+    const ph = document.createElement("div");
+    ph.className = "placeholder";
+    frame.appendChild(ph);
+    card.appendChild(frame);
+
+    const label = document.createElement("div");
+    label.className = "name";
+    label.textContent = it.name;
+    card.appendChild(label);
+
+    card.addEventListener("click", () => toggleDetail(card, it));
+    frag.appendChild(card);
+  }
+  el.grid.appendChild(frag);
+  // 监听所有卡片
+  for (const card of el.grid.children) io.observe(card);
+}
+
+// ============================================================
+// 详情展开条（独立 sticky 元素，不插入 grid）
+// ============================================================
+const detailBar = document.getElementById("detailBar");
+let activeCard = null;
+
+function findCategories(name) {
+  if (!state.data) return [];
+  const cats = [];
+  for (const c of state.data.categories) {
+    if (c.items.some(it => it.name === name)) cats.push(c.name);
+  }
+  return cats;
+}
+
+function toggleDetail(card, item) {
+  // 同一张卡片再次点击 → 收起
+  if (activeCard === card) {
+    closeDetail();
+    return;
+  }
+  // 清除上一张卡片高亮
+  if (activeCard) {
+    activeCard.style.borderColor = "";
+    activeCard.style.background = "";
+  }
+  activeCard = card;
+  card.style.borderColor = "var(--accent)";
+  card.style.background = "var(--accent-soft)";
+
+  // 构建 detailBar 内容
+  detailBar.innerHTML = "";
+
+  // 大图预览
+  const preview = document.createElement("div");
+  preview.className = "preview";
+  if (item.filled) {
+    const img = document.createElement("img");
+    img.src = item.filled;
+    img.alt = item.name + " (填充)";
+    preview.appendChild(img);
+  }
+  if (item.outline) {
+    const img = document.createElement("img");
+    img.src = item.outline;
+    img.alt = item.name + " (描边)";
+    img.classList.add("is-outline");
+    preview.appendChild(img);
+  }
+  detailBar.appendChild(preview);
+
+  // 信息区
+  const info = document.createElement("div");
+  info.className = "info";
+  const nameEl = document.createElement("div");
+  nameEl.className = "name";
+  nameEl.textContent = item.name;
+  info.appendChild(nameEl);
+
+  const filesEl = document.createElement("div");
+  filesEl.className = "files";
+  // 路径里的目录前缀只显示一次，避免 "Material Symbols/x · Material Symbols/y" 重复
+  const paths = [item.filled, item.outline].filter(Boolean);
+  const baseNames = paths.map(p => {
+    const idx = p.lastIndexOf("/");
+    return idx >= 0 ? p.slice(idx + 1) : p;
+  });
+  const dir = paths[0] && paths[0].includes("/")
+    ? paths[0].slice(0, paths[0].lastIndexOf("/")) + "/"
+    : "";
+  filesEl.innerHTML = "";
+  if (dir) {
+    const dirEl = document.createElement("div");
+    dirEl.style.opacity = "0.6";
+    dirEl.textContent = dir;
+    filesEl.appendChild(dirEl);
+  }
+  const baseEl = document.createElement("div");
+  baseEl.textContent = baseNames.join("   ·   ");
+  filesEl.appendChild(baseEl);
+  info.appendChild(filesEl);
+
+  const catLabel = document.createElement("div");
+  catLabel.className = "cat-label";
+  const cats = findCategories(item.name);
+  catLabel.textContent = cats.length > 0
+    ? `所属分类（${cats.length}）`
+    : "未归类（仅在其他）";
+  info.appendChild(catLabel);
+
+  const catsWrap = document.createElement("div");
+  catsWrap.className = "cats";
+  for (const cn of cats) {
+    const chip = document.createElement("button");
+    chip.className = "cat-chip";
+    chip.textContent = cn;
+    chip.addEventListener("click", () => {
+      selectMode("category:" + cn);
+    });
+    catsWrap.appendChild(chip);
+  }
+  if (cats.length === 0) {
+    const chip = document.createElement("span");
+    chip.className = "cat-chip";
+    chip.style.cursor = "default";
+    chip.style.opacity = "0.6";
+    chip.textContent = "其他";
+    catsWrap.appendChild(chip);
+  }
+  info.appendChild(catsWrap);
+  detailBar.appendChild(info);
+
+  // 复制文件名按钮
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "copy-btn";
+  copyBtn.textContent = "复制文件名";
+  copyBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const text = item.filled || item.outline || item.name;
+    navigator.clipboard?.writeText(text).then(() => {
+      copyBtn.textContent = "已复制 ✓";
+      setTimeout(() => copyBtn.textContent = "复制文件名", 1200);
+    }).catch(() => {
+      copyBtn.textContent = "复制失败";
+      setTimeout(() => copyBtn.textContent = "复制文件名", 1200);
+    });
+  });
+  detailBar.appendChild(copyBtn);
+
+  // 关闭按钮
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "close";
+  closeBtn.textContent = "×";
+  closeBtn.title = "收起";
+  closeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeDetail();
+  });
+  detailBar.appendChild(closeBtn);
+
+  detailBar.style.display = "flex";
+  // 详情条打开后，sticky 高度变化，刷新滚动偏移
+  requestAnimationFrame(syncStickyHeight);
+}
+
+function closeDetail() {
+  if (activeCard) {
+    activeCard.style.borderColor = "";
+    activeCard.style.background = "";
+    activeCard = null;
+  }
+  detailBar.style.display = "none";
+  detailBar.innerHTML = "";
+  requestAnimationFrame(syncStickyHeight);
+}
+
+function updateAlphabetBar(items, q) {
+  el.alphabetBar.classList.remove("visible");
+  el.alphabetBar.innerHTML = "";
+  // 任何模式只要有足够图标就显示字母索引（搜索时不显示，避免过滤后字母不全）
+  if (q || items.length < 10) {
+    requestAnimationFrame(syncStickyHeight);
+    return;
+  }
+  const letters = new Set(items.map(it => {
+    const c = it.name[0].toUpperCase();
+    return /\d/.test(c) ? "#" : c;
+  }));
+  const sorted = [...letters].sort();
+  el.alphabetBar.classList.add("visible");
+  for (const L of sorted) {
+    const btn = document.createElement("button");
+    btn.textContent = L;
+    btn.addEventListener("click", () => {
+      const target = [...el.grid.children].find(card => {
+        const c = card.dataset.name[0].toUpperCase();
+        const key = /\d/.test(c) ? "#" : c;
+        return key === L;
+      });
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    el.alphabetBar.appendChild(btn);
+  }
+  syncStickyHeight();
+}
+
+// 把 sticky-top 容器的实际高度写入 CSS 变量，配合 .card 的 scroll-margin-top
+// 让点击字母索引滚动后图标不会被字母条/详情条遮挡
+function syncStickyHeight() {
+  const sticky = document.getElementById("stickyTop");
+  if (!sticky) return;
+  document.documentElement.style.setProperty("--sticky-h", sticky.offsetHeight + "px");
+}
+window.addEventListener("resize", syncStickyHeight);
+
+// ============================================================
+// 侧栏分类
+// ============================================================
+function renderSidebar() {
+  el.cntAll.textContent = state.data.all.length;
+  el.catList.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  for (const c of state.data.categories) {
+    const btn = document.createElement("button");
+    btn.className = "cat";
+    btn.dataset.mode = "category:" + c.name;
+    btn.innerHTML = `<span>${escapeHtml(c.name)}</span><span class="count">${c.count}</span>`;
+    btn.addEventListener("click", () => selectMode(btn.dataset.mode));
+    frag.appendChild(btn);
+  }
+  el.catList.appendChild(frag);
+}
+
+// 静态「全部图标」按钮的事件（在 renderSidebar 之外，只绑一次）
+document.querySelector('aside button.cat[data-mode="all"]')
+  .addEventListener("click", (e) => {
+    selectMode(e.currentTarget.dataset.mode);
+  });
+
+function selectMode(mode) {
+  state.mode = mode;
+  document.querySelectorAll("aside button.cat").forEach(b => {
+    b.classList.toggle("active", b.dataset.mode === mode);
+  });
+  // 标题
+  if (mode === "all") {
+    el.curTitle.textContent = "全部";
+  } else {
+    el.curTitle.textContent = mode.split(":")[1];
+  }
+  el.main.scrollTop = 0;
+  applyFilter();
+}
+
+// ============================================================
+// 事件
+// ============================================================
+let searchTimer = null;
+el.search.addEventListener("input", (e) => {
+  state.query = e.target.value;
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(applyFilter, 120);
+});
+
+el.variantSwitch.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-variant]");
+  if (!btn) return;
+  state.variant = btn.dataset.variant;
+  el.variantSwitch.querySelectorAll("button").forEach(b => {
+    b.classList.toggle("active", b === btn);
+  });
+  // 变体变化后重新填充已渲染的卡片（不重建 DOM，避免抖动）
+  for (const card of el.grid.children) {
+    card.classList.toggle("both", state.variant === "both");
+    card.dataset.loaded = "0";
+    const frame = card.querySelector(".icon-frame");
+    frame.innerHTML = "";
+    const ph = document.createElement("div");
+    ph.className = "placeholder";
+    frame.appendChild(ph);
+    io.observe(card);
+  }
+});
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+
+// ============================================================
+// 启动
+// ============================================================
+async function init() {
+  el.loading.classList.add("visible");
+  try {
+    const res = await fetch(DATA_URL);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    state.data = await res.json();
+    el.stats.textContent = `${state.data.total_icons} 个图标 · ${state.data.total_files} 个 SVG 文件 · 多标签`;
+    renderSidebar();
+    selectMode("all");
+  } catch (err) {
+    el.loading.textContent = "加载失败: " + err.message + "（请通过本地 HTTP 服务器打开，例如 python -m http.server）";
+    el.loading.style.background = "#fee2e2";
+    el.loading.style.color = "#dc2626";
+    console.error(err);
+  } finally {
+    el.loading.classList.remove("visible");
+  }
+}
+
+init();
+</script>
+</body>
+</html>

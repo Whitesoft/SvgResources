@@ -1,0 +1,238 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""扫描 SVG 目录，按主题关键词分类，生成 icons.json 供 index.html 懒加载使用。"""
+import json
+import os
+import re
+from collections import defaultdict
+
+SVG_DIR = os.path.dirname(os.path.abspath(__file__))
+OUT_JSON = os.path.join(SVG_DIR, "icons.json")
+
+# 图标主题子目录（支持以后扩展更多主题，例如 "Tabler Icons" 等）
+# 每项是 (子目录名, 显示用主题名)；脚本会扫描每个子目录下的 .svg 文件
+THEME_DIRS = [
+    ("Material Symbols", "Material Symbols"),
+]
+
+# 分类：每个分类是 (中文名, 关键词列表)。匹配按顺序进行，先匹配到的优先。
+# 用 startswith / contains 模糊匹配。contains 风险较大，关键词尽量具体。
+CATEGORIES = [
+    ("数字与字母", ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"], "startswith_digit"),
+    ("数字与计数", ["counter", "speed", "mp", "fps", "numbers", "number", "digit", "rating"], "any"),
+    ("导航箭头", ["arrow", "chevron", "back", "forward", "expand", "collapse", "unfold", "left", "right", "up-", "down-", "east", "west", "north", "south", "near-me", "navigation", "directions"], "any"),
+    ("媒体影像", ["image", "photo", "camera", "video", "movie", "film", "music", "audio", "play", "pause", "microphone", "mic", "gallery", "picture", "media", "lyrics", "podcasts", "radio", "volume", "sound", "speaker", "headphones", "earbuds", "in-ear", "subtitles", "stream", "subwoofer", "pip", "av1", "avc", "hevc", "hls", "rtt", "mms", "rss", "equalizer", "panorama", "screenshot", "screen-record", "gif", "hd", "full-hd", "high-res", "high-quality", "vr180", "vrpano", "amp-stories", "art-track", "comic-bubble", "manga", "genres", "piano", "piano-off",
+        # 摄影分辨率（百万像素）
+        "2mp","3mp","4mp","5mp","6mp","7mp","8mp","9mp","10mp","11mp","12mp","13mp","14mp","15mp","16mp","17mp","18mp","19mp","20mp","21mp","22mp","23mp","24mp","50mp",
+        # 显示分辨率 K
+        "1k","1k-plus","2k","2k-plus","3k","3k-plus","4k","4k-plus","5k","5k-plus","6k","6k-plus","7k","7k-plus","8k","8k-plus","9k","9k-plus","10k",
+        # 视频帧率
+        "24fps","30fps","60fps","24fps-select","30fps-select","60fps-select",
+        # 全景 / VR / AR
+        "360","vrpano","vr180-create2d","vr180-create2d-off","ar-on-you",
+        # 播放控制：倍速
+        "speed","speed-0-25","speed-0-2x","speed-0-5","speed-0-5x","speed-0-75","speed-0-7x","speed-1-2","speed-1-25","speed-1-2x","speed-1-5","speed-1-5x","speed-1-75","speed-1-7x","speed-2","speed-2x","speed-3","speed-4",
+        # 播放控制：跳转
+        "forward-5","forward-10","forward-30","forward-media","forward-circle","fast-forward","fast-rewind","skip-next","skip-previous","replay","replay-5","replay-10","replay-30","replay-circle-filled","slow-motion-video","closed-caption","closed-caption-add","closed-caption-disabled",
+        # 摄影夜景 / 运动 / 视频博客
+        "motion-photos-auto","motion-photos-on","motion-photos-paused","night-sight-auto","night-sight-auto-off","night-sight-max","auto-videocam","auto-stories","auto-stories-off","graphic-eq","graphic-eq-off","youtube-activity","youtube-activity-2","youtube-searched-for","iframe","iframe-off",
+    ], "any"),
+    ("设备硬件", ["phone", "laptop", "tablet", "desktop", "monitor", "keyboard", "mouse", "printer", "print", "fax", "watch", "device", "tv", "speaker", "router", "memory", "usb", "bluetooth", "wifi", "signal-cellular", "battery", "cast", "nfc", "sd-", "sim-", "remote", "hard-disk", "hardware", "cable", "host", "dvr", "modem", "settop", "trackpad", "scanner", "edgesensor", "sensor", "trackpad", "mobile", "screen-rotation", "chrome", "dock", "computer", "ios", "aod", "edgesensor-high", "edgesensor-low", "jamboard", "infrared", "vr", "headset", "tty", "apk-install", "apk-document", "devices", "phonelink", "flashlight", "doorbell", "app-blocking", "app-promo", "app-registration", "app-shortcut", "app-spark"], "any"),
+    ("通讯消息", ["mail", "message", "chat", "forum", "comment", "send", "email", "inbox", "draft", "forward", "reply", "post", "sms", "contact", "social", "share", "link", "call", "sip", "dialer", "communication", "conversation", "dialog", "mms", "notifications","notifications-active","notifications-off","notifications-paused","notifications-unread","business-messages"], "any"),
+    ("文件文件夹", ["file", "folder", "attach", "upload", "download", "document", "archive", "drive", "restore", "assignment", "description", "grading", "docs", "csv", "ods", "odt", "pdf", "page", "topic", "subject", "subheader", "title", "draft", "summarize", "essay", "quiz", "request-page", "submission", "rubric", "task", "notes", "note", "notebook", "pages", "article", "spreadsheet", "sheets-rtl", "request-quote", "request", "forms"], "any"),
+    ("用户账号", ["person", "user", "account", "face", "human", "group", "groups", "groups-2", "groups-3", "crowd", "friend", "manage", "member", "sick", "pregnant", "badge", "crew", "supervisor", "engineering", "profile", "guardian", "support-agent", "assistant", "concierge", "agent", "co-present", "partner", "actor", "recent-actors"], "any"),
+    ("人物形象", ["man", "woman", "female", "male", "boy", "girl", "child", "baby", "agender", "transgender", "elder", "elderly", "family", "demography", "diversity", "accessibility", "pregnancy", "e911-avatar", "people", "minor", "spokesman", "6-ft-apart"], "any"),
+    ("编辑文本", ["edit", "draw", "text", "font", "pen", "pencil", "brush", "format", "align", "color", "palette", "strikethrough", "underline", "italic", "bold", "highlight", "spellcheck", "translate", "table-chart", "titlecase", "lowercase", "uppercase", "subscript", "superscript", "margin", "opacity", "glyphs", "serif", "sort", "sort-by-alpha", "signature", "sticker", "sticky-note", "stylus-note", "regular-expression", "match-case", "match-word", "custom-typography", "special-character"], "any"),
+    ("时间日期", ["clock", "time", "hour", "alarm", "calendar", "schedule", "date", "history", "timer", "stopwatch", "sandglass", "pending", "event", "today", "next-week", "reminder", "rsvp", "things-to-do", "snooze", "last-page", "first-page", "recent"], "any"),
+    ("状态反馈", ["check", "done", "close", "cancel", "error", "fail", "success", "sync", "refresh", "update", "save", "verified", "loading", "progress", "offline", "online", "publish", "draft", "undo", "redo", "remove", "cached", "cache", "hide", "show", "enable", "disable", "restart", "reset", "deselect", "select", "mark-as-unread", "thread-unread", "read-more", "restart-alt", "autorenew", "do-not-disturb", "stop", "repeat", "repeat-on", "repeat-one", "repeat-one-on", "resume", "unpublished", "unsubscribe", "upcoming", "orders", "order-approve", "inactive-order", "unsubscribe", "autostop", "track-changes", "exit-to-app", "unpublished", "full-coverage", "captured", "capture", "hourglass", "hourglass-bottom","hourglass-disabled","hourglass-empty","hourglass-full","hourglass-top","switch","switch-access","switch-access-2","switch-access-3","switch-access-shortcut","switch-off","keep","keep-off","keep-public","approval","approval-delegation","approval-delegation-off"], "any"),
+    ("设置工具", ["settings", "config", "tune", "adjust", "build", "construction", "tool", "wrench", "hammer", "screw", "key-", "plumbing", "carpenter", "handyman", "extension", "menu", "more"], "any"),
+    ("商务购物", ["shop", "store", "cart", "money", "dollar", "pay", "cash", "bank", "credit", "wallet", "receipt", "gift", "currency", "percent", "price", "label", "tag", "storefront", "shopping", "sell", "trophy", "leaderboard", "medal", "atm", "euro", "finance", "ballot", "monetization", "mintmark", "loyalty", "redeem", "paid", "point-of-sale", "toll", "production-quantity-limits", "real-estate-agent", "tenancy", "corporate", "campaign", "brand-awareness", "rewarded-ads", "reviews", "performance-max", "18-up-rating","rating", "bid-landscape","bid-landscape-disabled","business-center","contactless","contactless-off","personal-bag","personal-bag-off"], "any"),
+    ("房屋家居", ["home", "house", "building", "roof", "bed", "chair", "sofa", "door", "window", "bath", "kitchen", "room", "appliance", "furniture", "cottage", "cabin", "balcony", "garage", "warehouse", "factory", "apartment", "air-purifier", "blender", "dishwasher", "microwave", "kettle", "fridge", "oven", "fan", "curtains", "blinds", "iron", "candle", "lightbulb", "lamp", "skillet", "stockpot", "styler", "range-hood", "refrigerator", "sprinkler", "faucet", "shower", "roller-shades", "shades", "crib", "tatami-seat", "countertops", "stove", "laundry", "dry-cleaning", "cleaning", "cookware", "flatware", "fork-spoon", "tabletop", "chair-alt", "mode-heat", "mode-cool", "mode-fan", "mode-heat-cool", "mode-heat-off", "mode-cool-off", "mode-fan-off", "mode-dual", "hvac", "nest-", "flourescent", "fluorescent", "light-mode", "light-off", "light", "light-group", "light-group-2", "wc", "wall-art", "wallpaper", "front-loader", "ac-unit", "fire-hydrant", "fire-extinguisher", "conveyor-belt", "wash", "vacuum", "styler", "dirty-lens", "bedtime", "bedtime-off", "backlight-high", "backlight-high-off", "backlight-low", "backlight"], "any"),
+    ("建筑场所", ["mosque", "museum", "church", "synagogue", "temple", "stadium", "theater", "hotel", "bungalow", "cabin", "chalet", "castle", "fort", "foundation", "gate", "fence", "balcony", "pergola", "brick", "deck", "mall", "spa", "onsen", "beach", "pool", "sauna", "hot-tub", "nightlife", "festival", "camping", "attractions", "rest-area", "short-stay", "podium", "plaza", "hallway", "stairs", "elevator", "funeral", "wedding", "rsvp", "amusement", "tour", "rv-hookup", "night-shelter", "holiday-village", "bungalow", "villa", "deck"], "any"),
+    ("交通出行", ["car", "bus", "train", "plane", "bike", "truck", "rocket", "ship", "boat", "flight", "directions", "route", "traffic", "fuel", "gas", "electric", "ev-", "tram", "taxi", "subway", "two-", "moped", "motorcycle", "wagon", "transit", "commute", "airplane", "scooter", "stroller", "forklift", "helicopter", "ambulance", "metro", "monorail", "funicular", "gondola-lift", "cable-car", "drone", "sailing", "cruise", "ferry", "no-transfer", "no-luggage", "multiple-stop", "mode-of-travel", "transportation", "travel", "tire-repair", "road", "lane", "minor-crash", "no-crash", "airlines", "airport", "connecting-airports", "multiple-airports", "departure-board", "rv-hookup", "trolley", "luggage", "moving", "your-trips", "flyover", "outbound", "nordic-walking",
+        # 航空座位 / 行李 / 挡风玻璃 / 停车 / 拖车
+        "airline-seat-flat","airline-seat-flat-angled","airline-seat-individual-suite","airline-seat-legroom-extra","airline-seat-legroom-normal","airline-seat-legroom-reduced","airline-seat-recline-extra","airline-seat-recline-normal","airline-stops","airline",
+        "carry-on-bag","carry-on-bag-checked","carry-on-bag-inactive",
+        "windshield-defrost-auto","windshield-defrost-front","windshield-defrost-rear","windshield-heat-front","windshield",
+        "parking-meter","parking-sign","parking-valet","parking",
+        "auto-towing","no-backpack","trolley","trailer",
+    ], "any"),
+    ("天气自然", ["weather", "cloud", "rain", "snow", "sun", "moon", "storm", "wind", "thunder", "water", "umbrella", "flood", "forest", "tree", "plant", "grass", "park", "earth", "eco", "energy", "sunny", "fog", "tornado", "humidity", "lightning", "hail", "landslide", "mountain", "beach", "salinity", "altitude", "recycling", "co2", "propane", "agriculture", "nature", "air", "severe-cold", "avalanche", "thermometer", "fertile", "specific-gravity", "total-dissolved-solids", "thermometer-gain", "thermometer-loss", "thermometer-minus", "earthquake", "volcano", "thermometer-add"], "any"),
+    ("食品饮料", ["food", "drink", "restaurant", "coffee", "tea", "wine", "beer", "cake", "fruit", "rice", "burger", "pizza", "kitchen", "ramen", "dining", "liquor", "bar", "bakery", "dinner", "breakfast", "lunch", "grocery", "meal", "icecream", "cooking", "okonomiyaki", "soba", "sushi", "festival", "hanami-dango", "japanese-curry", "shaved-ice", "soup", "noodle", "skillet", "stockpot", "soap", "cocktail", "dine-in", "dine-lamp", "toast", "champagne", "sake", "soy-sauce"], "any"),
+    ("动物植物", ["dog", "cat", "bird", "fish", "pet", "paw", "feather", "insect", "bug", "cruelty", "rabbit", "raven", "crisis", "bat", "spider", "horse", "pets", "pest-control", "skeleton", "bone", "skull", "hive", "honey"], "any"),
+    ("医疗健康", ["health", "medical", "hospital", "doctor", "medicine", "heart", "pulse", "blood", "vaccine", "monitor-heart", "therapy", "dental", "eye-", "visibility", "hearing", "wheelchair", "elderly", "baby", "sick", "medication", "dermatology", "endocrinology", "gynecology", "hematology", "neurology", "nephrology", "oncology", "ophthalmology", "psychiatry", "rheumatology", "pulmonology", "podiatry", "ecg", "glucose", "metabolism", "respiratory", "stethoscope", "syringe", "symptoms", "surgical", "mixture-med", "clinical-notes", "recent-patient", "procedure", "inpatient", "spo2", "tibia-alt", "humerus-alt", "femur-alt", "oral-disease", "psychology", "cognition", "assistant-direction", "diet", "health-and-safety", "medication-liquid", "cannabis", "asa", "iron", "fitness-center", "vital-signs", "vitals", "oxygen-saturation", "ventilator", "vo2-max", "urology", "outpatient", "inpatient", "diagnosis", "clinical", "chronic", "wounds-injuries", "surgery", "undereye", "wrist", "ulna-radius-alt", "body-fat", "body-system", "hr-resting", "ventilation", "allergy", "allergies", "eyeglasses", "recent-patient", "other-admission", "inpatient", "sauna", "flaky", "cool-to-dry", "ward"], "any"),
+    ("警示通知", ["notification", "alert", "warning", "info", "help", "question", "issue", "badge", "flag", "priority", "emergency", "crisis", "announcement", "release", "dangerous", "explosion", "bomb", "sos", "problem", "siren", "alert", "broken", "danger", "gpp-bad", "gpp-maybe", "gpp-good", "fmd-bad", "disc-full", "whatshot", "troubleshoot", "destruction"], "any"),
+    ("安全锁", ["security", "lock", "shield", "password", "login", "logout", "fingerprint", "vpn", "encrypted", "verified-user", "policy", "spam", "block", "ban", "privacy", "phishing", "spoof", "no-encryption", "enhanced-encryption", "private-connectivity", "identity", "passkey", "captcha", "key","key-off","key-vertical","key-visualizer"], "any"),
+    ("游戏运动", ["game", "sport", "casino", "dice", "poker", "joystick", "controller", "football", "basketball", "soccer", "tennis", "gaming", "sports", "esports", "score", "scoreboard", "kayaking", "snowboarding", "skiing", "surfing", "skate", "chess", "badminton", "fitness", "golf", "hiking", "ice-skating", "nordic-walking", "padel", "paragliding", "pickleball", "roller-skating", "scuba-diving", "sledding", "kayak", "sprint", "kendo", "swords", "sword-rose", "taunt", "gun", "target", "stadium", "racquet", "joystick-alt", "fan-focus", "sabre", "medal"], "any"),
+    ("AI与技术", ["robot", "smart", "code", "developer", "terminal", "deploy", "cloud", "server", "database", "network", "integration", "api", "memory-alt", "python", "javascript", "html", "css", "schema", "biotech", "smart-display", "smart-tout", "neurology", "http", "lan", "sdk", "php", "sql", "p2p", "nat", "cookie", "rss", "prompt-suggestion", "token", "tokens", "contextual-token", "generating-tokens", "cookie-off", "memory-alt", "stack", "stacks", "stack-off", "smart-phone", "smart-tout"], "any"),
+    ("图形形状", ["shape", "circle", "square", "triangle", "polygon", "star", "hexagon", "line", "dash", "dot", "ring", "scatter", "vertical", "horizontal", "diagonal", "rectangle", "oval", "diamond", "pentagon", "octagon", "ruler", "rounded-corner", "asterisk", "exclamation", "equal", "star", "polygon", "bubble", "bubbles", "cube", "pyramid", "cylinder",
+        # 2D/3D 维度
+        "2d","2d-2","3d","3d-2","3d-rotation",
+    ], "any"),
+    ("地图位置", ["map", "location", "place", "pin", "gps", "compass", "geo", "satellite", "terrain", "near", "local", "region", "trail", "trail-length", "trail-length-medium", "trail-length-short", "streetview", "beenhere", "follow-the-signs", "fmd-bad", "where-to-vote", "how-to-vote", "how-to-reg", "located", "recenter", "location-on", "add-location", "navigation"], "any"),
+    ("教育与科学", ["school", "science", "book", "study", "lab", "experiment", "formula", "function", "research", "teacher", "student", "library", "knowledge", "dictionary", "calculator", "psychology", "philosophy", "quiz", "grade", "grading", "rubric", "school", "presentation", "science-off", "interpreter-mode", "mindfulness", "self-improvement", "stances", "tactic", "strategy", "trending-up", "trending-down", "trending-flat", "calculation"], "any"),
+    ("情感与表情", ["mood", "feeling", "emoji", "emoticon", "smile", "sad", "happy", "love", "favorite", "thumb", "like", "dislike", "sentiment", "emotion", "facial", "heart", "cheer", "celebration", "relax", "sleep", "comedy-mask", "theater-comedy", "satisfaction", "angry", "excited", "masks", "lips", "owl", "mystery"], "any"),
+    ("容器布局", ["view", "list", "grid", "frame", "tab", "splitscreen", "border", "table", "dashboard", "apps", "widget", "card", "panel", "layout", "column", "row", "module", "puzzle", "module", "tile", "segment", "layers", "deck", "pageless", "toc", "subheader", "reorder", "shift", "stack", "margin", "footer", "header", "page-footer", "page-header", "sidebar", "subheader", "design-services", "trending", "fit", "fit-page", "fit-width", "fit-screen", "maximize", "minimize", "fullscreen", "fullscreen-exit", "magnification", "magnify", "pan-zoom", "zoom", "scale", "resize", "aspect-ratio", "flex-direction", "flex-no-wrap", "flex-wrap", "density-large", "density-medium", "density-small", "density", "float-landscape", "float-portrait", "stay-primary-portrait", "vignette", "workspace-premium", "dark-mode", "high-density", "low-density", "input", "output"], "any"),
+    ("图像编辑", ["filter", "crop", "rotate", "blur", "exposure", "brightness", "flash", "hdr", "looks", "ink", "healing", "duotone", "gradient", "auto-fix", "tonality", "shutter", "aperture", "iso", "raw-on", "raw-off", "contrast-rtl-off", "reset-focus", "reset-shadow", "reset-white-balance", "portrait-lighting", "portrait-lighting-off", "burst-mode", "auto-awesome", "auto-awesome-motion", "magic-exchange", "magic-tether", "macro-auto", "macro-off", "loupe", "flip", "flip-to-front", "transform", "straighten", "straight", "dehaze", "flare",
+        # 白平衡
+        "wb-auto","wb-incandescent","wb-iridescent","wb-shade","wb-sunny","wb-twilight","wb-twilight-2",
+        # 视频转场 / 颜色反转
+        "transition-chop","transition-fade","transition-push","invert-colors","invert-colors-off",
+    ], "any"),
+    ("数据图表", ["chart", "graph", "data", "stat", "analytics", "insights", "leaderboard", "timeline", "query", "monitoring", "report", "savings", "donut", "heap-snapshot", "legend-toggle", "simulation", "flowsheet", "demography", "source-environment", "stacked-bar-chart", "area-chart", "monitoring", "assured-workload", "flow", "trail-length"], "any"),
+    ("搜索查找", ["search", "find", "browse", "lookup", "query", "explore", "discover", "radar", "scan", "scanner", "detect", "detector", "sensors", "find-in-page", "find-location", "search-off", "lasso-select", "jump-to-element", "find-replace", "explore", "near-me"], "any"),
+    ("添加删除", ["add", "delete", "remove", "clear", "drag", "drop", "swap", "move", "content", "copy", "cut", "paste", "merge", "join", "split", "filter", "reorder", "rebase", "repartition", "sweep", "cycle", "commit", "compare", "compress", "contrast", "shrink", "delete-sweep", "shift", "step", "step-into", "step-out", "step-over", "skip-next", "skip-previous", "shuffle"], "any"),
+    ("语言文字", ["language", "translate", "abc", "dialpad", "keyboard", "alphabet", "letter", "markdown", "spell", "letter", "format-list", "translate", "kanji", "text", "font"], "any"),
+    ("电源能源", ["power", "energy", "battery", "charging", "charge", "plug", "outlet", "solar", "ev-", "fuel", "gas", "propane", "solar-power", "gas-meter", "3p"], "any"),
+    ("手势触摸", ["touch", "hand", "finger", "tap", "swipe", "gesture", "drag", "pinch", "scroll", "pointer", "cursor", "mouse", "paw", "sign-language", "back-hand", "lift-to-talk", "select-to-speak", "record-voice-over", "voice-over", "wave", "high-five"], "any"),
+    ("实验科学", ["science", "lab", "experiment", "biotech", "flask", "microscope", "telescope", "physics", "chemistry", "atom", "molecule", "formula", "genetics", "particle", "experiment", "function"], "any"),
+    ("容器存储", ["box", "container", "jar", "bottle", "package", "inventory", "warehouse", "storage", "archive", "pallet", "pail", "shelves", "chest", "stockpot"], "any"),
+    ("媒体出版", ["news", "newspaper", "newsstand", "newsmode", "breaking-news", "amp-stories", "article", "blog", "feed", "rss-feed", "subscriptions", "comic", "manga", "art-track", "artist", "celebration", "podcast", "magazine", "broadcast", "broadcast-on-home", "broadcast-on-personal"], "any"),
+    ("政府法律", ["gavel", "ballot", "license", "policy", "permit", "guard", "military-tech", "guardian", "policy", "rule", "law", "tenancy", "policy", "synagogue", "church", "mosque", "temple", "rsvp", "corporate-fare", "enterprise", "verified-user", "convention"], "any"),
+    ("网络协议", ["http", "lan", "vpn", "hls", "hls-off", "av1", "avc", "hevc", "mimo", "dns", "ipv", "sdk", "php", "sql", "p2p", "nat", "cookie", "rss", "ipv6", "ipv4", "udp", "tcp", "domain", "domain-verification", "captive-portal", "webhook", "polymer", "web-asset-off", "ats", "cell-tower",
+        # 移动通讯代
+        "5g","1x-mobiledata","1x-mobiledata-badge","3g-mobiledata","3g-mobiledata-badge","4g-mobiledata","4g-mobiledata-badge","4g-plus-mobiledata","5g-mobiledata-badge","lte-mobiledata","lte-plus-mobiledata","mobiledata-arrows","mobiledata-off",
+    ], "any"),
+    ("声音语音", ["voice", "audio", "sound", "speech", "narration", "mic", "voice-over", "record-voice-over", "transcribe", "interpreter", "speech-to-text", "speaker", "subtitle", "subtitles", "voice-", "assist-walker"], "any"),
+]
+
+
+def normalize(filename):
+    """从 'add-circle-outline-rounded.svg' 等返回 'add-circle'。"""
+    name = filename
+    name = re.sub(r"-outline-rounded\.svg$", "", name)
+    name = re.sub(r"-rounded\.svg$", "", name)
+    name = re.sub(r"\.svg$", "", name)
+    return name
+
+
+def match_categories(name):
+    """返回该 name 所属的所有分类中文名列表（多标签，去重保序）。未匹配返回空列表。
+
+    匹配规则：
+    - 前缀型关键词（以 '-' 结尾，如 'ev-'、'key-'、'sd-'）：要求词元以该前缀开头
+    - 普通关键词：要求作为完整词元出现（前后都被 '-' 或字符串边界包裹）
+      这样可避免 'ear' 命中 'gear'、'light' 命中 'flight'、'air' 命中 'airplane' 等子串误匹配
+    """
+    matched = []
+    seen = set()
+    wrapped = f"-{name}-"
+    for cat_name, keywords, mode in CATEGORIES:
+        hit = False
+        if mode == "startswith_digit":
+            if name and name[0].isdigit():
+                hit = True
+        else:
+            for kw in keywords:
+                if kw.endswith("-"):
+                    # 前缀型：词元以 kw 开头
+                    if name.startswith(kw) or f"-{kw}" in wrapped:
+                        hit = True
+                        break
+                else:
+                    # 完整词元：前后都加边界，杜绝子串误命中
+                    if f"-{kw}-" in wrapped or name == kw:
+                        hit = True
+                        break
+        if hit and cat_name not in seen:
+            seen.add(cat_name)
+            matched.append(cat_name)
+    return matched
+
+
+def main():
+    # 收集所有主题子目录下的 .svg 文件
+    # 文件路径相对 SVG_DIR，形如 "Material Symbols/foo-rounded.svg"
+    all_files = []
+    for sub_name, _ in THEME_DIRS:
+        sub_dir = os.path.join(SVG_DIR, sub_name)
+        if not os.path.isdir(sub_dir):
+            continue
+        for f in os.listdir(sub_dir):
+            if f.endswith(".svg"):
+                # 用正斜杠，便于直接拼接 URL
+                all_files.append(f"{sub_name}/{f}")
+    files = all_files
+
+    # name -> {filled: ?, outline: ?}
+    by_name = defaultdict(dict)
+    for f in files:
+        basename = os.path.basename(f)
+        name = normalize(basename)
+        if basename.endswith("-outline-rounded.svg"):
+            by_name[name]["outline"] = f
+        elif basename.endswith("-rounded.svg"):
+            by_name[name]["filled"] = f
+        else:
+            # 其他命名兜底，归到 filled
+            by_name[name]["filled"] = f
+
+    # 分类（多标签：一个图标可属于多个分类）
+    categorized = defaultdict(list)
+    uncategorized = []
+    categorized_names = set()  # 出现在至少一个分类的图标名
+    for name in sorted(by_name.keys()):
+        cats = match_categories(name)
+        variants = by_name[name]
+        item = {
+            "name": name,
+            "filled": variants.get("filled"),
+            "outline": variants.get("outline"),
+        }
+        for cat in cats:
+            categorized[cat].append(item)
+        if cats:
+            categorized_names.add(name)
+        else:
+            uncategorized.append(item)
+
+    # 按首字母分组（用于 All 索引）
+    alpha_groups = defaultdict(list)
+    for name in sorted(by_name.keys()):
+        first = name[0].upper()
+        if first.isdigit():
+            first = "#"
+        alpha_groups[first].append({
+            "name": name,
+            "filled": by_name[name].get("filled"),
+            "outline": by_name[name].get("outline"),
+        })
+
+    # 整理 categories 顺序，按 CATEGORIES 定义顺序，附加未分类
+    cat_order = [c[0] for c in CATEGORIES]
+    cats = []
+    for cn in cat_order:
+        items = categorized.get(cn, [])
+        if items:
+            cats.append({"name": cn, "count": len(items), "items": items})
+    if uncategorized:
+        cats.append({"name": "其他", "count": len(uncategorized), "items": uncategorized})
+
+    alpha = [{"letter": k, "count": len(v), "items": v} for k, v in sorted(alpha_groups.items())]
+
+    result = {
+        "total_icons": len(by_name),
+        "total_files": len(files),
+        "total_labels": sum(len(v) for v in categorized.values()),
+        "categories": cats,
+        "alphabet": alpha,
+        "all": [{"name": n, "filled": by_name[n].get("filled"), "outline": by_name[n].get("outline")} for n in sorted(by_name.keys())],
+    }
+
+    with open(OUT_JSON, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False)
+
+    print(f"Total unique icons: {len(by_name)}")
+    print(f"Total SVG files: {len(files)}")
+    print(f"Categories:")
+    for c in cats:
+        print(f"  {c['name']}: {c['count']}")
+    print(f"Alphabet groups: {len(alpha)}")
+    print(f"Output: {OUT_JSON}")
+    # 文件大小
+    sz = os.path.getsize(OUT_JSON)
+    print(f"JSON size: {sz/1024:.1f} KB")
+
+
+if __name__ == "__main__":
+    main()
