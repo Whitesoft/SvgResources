@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Read",
+      "Skill",
+      "WebFetch",
+      "WebSearch",
+      "mcp__web-reader__webReader",
+      "mcp__web-search-prime__web_search_prime",
+      "mcp__zread__search_doc",
+      "mcp__zread__read_file",
+      "mcp__zai-mcp-server__analyze_image",
+      "mcp__ide__executeCode",
+      "mcp__zread__get_repo_structure"
+    ]
+  }
+}
