@@ -701,7 +701,7 @@ function toggleDetail(card, item) {
 
     const addBtn = document.createElement("button");
     addBtn.className = "add-pick-btn";
-    addBtn.textContent = v.label ? `添加${v.label}` : "添加备选";
+    addBtn.textContent = "添加备选";
     addBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (addBtn.disabled) return;
