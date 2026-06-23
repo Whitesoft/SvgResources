@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目是什么
 
-一个**搜集主题 SVG 图标并提供本地预览**的自包含工具集。内置四套主题：Google Material Symbols、Lucide、Solar、Tabler Icons。运行时是纯静态的 HTML/JS，唯一的构建步骤是一个 Python 脚本，把各主题 SVG 目录扫描成多份 JSON 索引（每主题一份，外加一份主题清单）。
+一个**搜集主题 SVG 图标并提供本地预览**的自包含工具集。内置六套主题：Google Material Symbols、Lucide、Solar、Tabler Icons、Carbon、Fluent UI System Icons。运行时是纯静态的 HTML/JS，唯一的构建步骤是一个 Python 脚本，把各主题 SVG 目录扫描成多份 JSON 索引（每主题一份，外加一份主题清单）。
+
+`download_svg_from_Iconify.py` 负责从 Iconify 拉取图标集（文件夹名取网站显示名）；下载完成后**自动调用 `_build_index.py` 重建索引**（加 `--no-rebuild` 可跳过），所以新下载的图标集会立即出现在预览页，无需手工登记。
 
 ## 常用命令
 
@@ -39,8 +41,9 @@ python server.py
    - 其他命名兜底归入填充。
    其他主题（Lucide/Solar/Tabler）各有自己的后缀约定。具体怎么从文件名解析出图标名与形态，见下面第 2 点的 `THEMES` 配置与「后缀优先」算法。
 
-2. **`_build_index.py` → `themes.json` + 各 `icons-<theme>.json`** —— 构建步骤。两件事必须理解：
-   - `THEMES`：扩展新图标主题的入口，每项是一个主题配置（目录、显示名、输出文件名、形态后缀列表 `variants`、兜底形态、可选专属分类关键词）。形态由通用的「后缀优先」算法解析，item 形态泛化为 `files: {variantKey: 路径}`。
+2. **`_build_index.py` → `themes.json` + 各 `icons-<theme>.json`** —— 构建步骤。三件事必须理解：
+   - `THEMES`：扩展新图标主题的入口，每项是一个主题配置（目录、显示名、输出文件名、形态后缀列表 `variants`、兜底形态、可选专属分类关键词）。形态由通用的「后缀优先」算法解析，item 形态泛化为 `files: {variantKey: 路径}`。**仅多形态主题**（Material/Solar/Fluent 等）需要在此显式配置。
+   - `discover_extra_themes()`：**自动发现**——扫描项目根下未被 `THEMES` 收录、排除 `Picked`/`docs`/`.git`/`.claude` 且含 `.svg` 的子目录，作为**单形态默认主题**登记。因此下载任何单形态图标集（如 Lucide/Tabler/Carbon 风格）只需放进目录再重建索引即可出现，无需改 `THEMES`。
    - `CATEGORIES`：默认分类关键词 `(中文分类名, 关键词列表, 匹配模式)`；各主题可在 `THEMES` 里用 `categories` 覆盖。一个图标可以同时落到**多个**分类（多标签）。匹配由 `match_categories()` 完成：
      - 以 `-` 结尾的关键词按前缀匹配词元（如 `ev-`、`key-`）；
      - 其他关键词按**完整词元**匹配（前后用 `-` 边界包裹），刻意规避子串误命中（例如不让 `ear` 命中 `gear`）；
@@ -56,8 +59,8 @@ python server.py
 
 ## 改这个仓库时
 
-- **新增图标**：把 `.svg` 按命名约定放进对应主题目录（如 `Material Symbols/`、`Lucide/`），然后 `python _build_index.py`。
-- **新增一种主题**：编辑 `_build_index.py` 的 `THEMES`，加一项（含 `dir`/`name`/`file`/`variants`/`fallback_variant`），然后 `python _build_index.py`。
+- **新增图标**：把 `.svg` 按命名约定放进对应主题目录（如 `Material Symbols/`、`Lucide/`），然后 `python _build_index.py`。若用 `download_svg_from_Iconify.py` 下载，这一步会自动完成。
+- **新增一种主题**：**单形态**主题无需任何配置——新建目录、放入 `.svg`、跑构建即可（`discover_extra_themes` 会自动收录）。**多形态**主题（文件名带形态/尺寸后缀，需归并）才编辑 `_build_index.py` 的 `THEMES`，加一项（含 `dir`/`name`/`file`/`variants`/`fallback_variant`），然后 `python _build_index.py`。
 - **新增一种分类**：编辑 `_build_index.py` 的 `CATEGORIES`，**不要**手改各 `icons-<theme>.json` —— 它们每次都会被整体重写。
 - **JSON 里的路径用正斜杠**（`Material Symbols/foo-rounded.svg`），这样能直接和文档基址 URL 拼接 —— 改构建脚本时要保留这一点。
 - `index.html`、`themes.json`、各 `icons-<theme>.json`、`预览.bat` 都已纳入版本管理，这样一份全新 checkout 不用跑构建就能预览；结构变化后要同步更新。

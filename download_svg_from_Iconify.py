@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import socket
+import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -216,6 +217,26 @@ def download_prefix(prefix: str, folder_name: str, output_root: Path,
     return (downloaded, skipped, failed)
 
 
+def rebuild_preview_index(output_root: Path):
+    """下载完成后自动重建本地预览索引（_build_index.py）。
+
+    仅当输出目录里存在 _build_index.py 时才执行——即只对 SvgResources 预览项目生效。
+    _build_index.py 会自动发现新增的图标集目录（见其中的 discover_extra_themes），
+    所以新下载的主题无需任何手工登记即可出现在预览页。
+    """
+    build = output_root / "_build_index.py"
+    if not build.exists():
+        return
+    log("\n正在重建预览索引 (_build_index.py)...")
+    try:
+        subprocess.run([sys.executable, str(build)], check=True,
+                       cwd=str(output_root))
+    except subprocess.CalledProcessError as e:
+        log(f"  重建索引失败（不影响下载结果）：退出码 {e.returncode}")
+    except Exception as e:
+        log(f"  重建索引失败（不影响下载结果）：{e}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="下载 Iconify SVG 图标集")
     parser.add_argument("--output", "-o", default="./iconify-svg",
@@ -230,6 +251,8 @@ def main():
                         help=f"单个图标集的并发线程数（默认 {WORKERS}）")
     parser.add_argument("--resume", action="store_true",
                         help="跳过已存在的文件")
+    parser.add_argument("--no-rebuild", action="store_true",
+                        help="下载后不自动重建预览索引（_build_index.py）")
     args = parser.parse_args()
 
     output_root = Path(args.output)
@@ -266,6 +289,10 @@ def main():
     log(f"\n全部完成（用时 {elapsed:.0f}s）")
     log(f"  总成功 {total_dl + total_skip}（含跳过 {total_skip}），总失败 {total_fail}")
     log(f"  文件保存在: {output_root.resolve()}")
+
+    # 下载完成后自动重建预览索引，让新图标集立即出现在预览页
+    if not args.no_rebuild:
+        rebuild_preview_index(output_root)
 
 
 if __name__ == "__main__":

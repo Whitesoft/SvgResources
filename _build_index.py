@@ -55,6 +55,25 @@ THEMES = [
         "fallback_variant": "default",
         "categories": None,
     },
+    {
+        "dir": "Carbon", "name": "Carbon", "file": "icons-carbon.json",
+        "variants": [("default", "默认", r"\.svg$")],
+        "fallback_variant": "default",
+        "categories": None,
+    },
+    {
+        # Fluent UI 命名：<icon>-<size>-<style>.svg（size∈16/20/24/28/48，style∈filled/regular）
+        # 用两条后缀正则剥离 "-NN-filled/.svg" 与 "-NN-regular/.svg"，把同一图标的多个尺寸
+        # 合并成一个图标名，filled/regular 作为两个形态。
+        "dir": "Fluent UI System Icons", "name": "Fluent UI System Icons",
+        "file": "icons-fluent.json",
+        "variants": [
+            ("filled",  "填充", r"-\d+-filled\.svg$"),
+            ("regular", "线性", r"-\d+-regular\.svg$"),
+        ],
+        "fallback_variant": "regular",
+        "categories": None,
+    },
 ]
 
 # 分类：每个分类是 (中文名, 关键词列表)。匹配按顺序进行，先匹配到的优先。
@@ -187,18 +206,59 @@ def extract_variant(basename, variants, fallback_variant):
     return fallback_variant, re.sub(r"\.svg$", "", basename)
 
 
+# 不作为主题扫描的目录（备选区、文档、版本控制等）
+EXCLUDE_DIRS = {"Picked", "docs", ".git", ".claude"}
+
+
+def discover_extra_themes(curated_dirs):
+    """自动发现：扫描 SVG_DIR 下未被 THEMES 收录、且含 .svg 的子目录，
+    作为单形态默认主题登记。
+
+    这样“下载一个新图标集 → 丢进目录 → 重建索引”即可自动出现在预览页，
+    无需手工编辑 THEMES。多形态主题（Material/Solar/Fluent 等）仍需在 THEMES 显式配置。
+    """
+    extra = []
+    if not os.path.isdir(SVG_DIR):
+        return extra
+    for entry in sorted(os.listdir(SVG_DIR)):
+        full = os.path.join(SVG_DIR, entry)
+        if entry.startswith(".") or entry in EXCLUDE_DIRS or entry in curated_dirs:
+            continue
+        if not os.path.isdir(full):
+            continue
+        # 至少含一个 .svg 才算图标集目录
+        try:
+            has_svg = any(f.endswith(".svg") for f in os.listdir(full))
+        except OSError:
+            has_svg = False
+        if not has_svg:
+            continue
+        slug = re.sub(r"[^a-z0-9]+", "-", entry.lower()).strip("-") or "extra"
+        extra.append({
+            "dir": entry, "name": entry,
+            "file": f"icons-{slug}.json",
+            "variants": [("default", "默认", r"\.svg$")],
+            "fallback_variant": "default",
+            "categories": None,
+        })
+    return extra
+
+
 def build_theme(theme):
     """扫描单个主题目录，返回与原 icons.json 同构（但泛化）的结果字典。"""
     sub_dir = os.path.join(SVG_DIR, theme["dir"])
     variants_cfg = theme["variants"]
     cats_cfg = theme["categories"] if theme["categories"] is not None else CATEGORIES
 
-    # 收集相对路径（正斜杠）
+    # 收集相对路径（正斜杠）。排序以保证构建确定性；
+    # 对多文件合并到同一图标名的主题（如 Fluent UI 的多尺寸），排序后“后赋值者胜”，
+    # 尺寸按文件名升序处理，最终保留最大尺寸的源文件（矢量缩放后视觉一致）。
     files = []
     if os.path.isdir(sub_dir):
         for f in os.listdir(sub_dir):
             if f.endswith(".svg"):
                 files.append(f"{theme['dir']}/{f}")
+    files.sort()
 
     # name -> {variant_key: relpath}
     by_name = defaultdict(dict)
@@ -250,8 +310,11 @@ def build_theme(theme):
 
 
 def main():
+    # THEMES = 显式配置的多形态/精选主题；再拼接自动发现的单形态主题
+    all_themes = THEMES + discover_extra_themes({t["dir"] for t in THEMES})
+
     manifest = []
-    for theme in THEMES:
+    for theme in all_themes:
         result = build_theme(theme)
         out_path = os.path.join(SVG_DIR, theme["file"])
         with open(out_path, "w", encoding="utf-8") as f:
