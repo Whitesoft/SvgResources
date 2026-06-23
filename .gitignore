@@ -19,3 +19,6 @@ Desktop.ini
 # 本地临时与日志
 *.log
 tmp/
+
+# 备选目录（运行时由 server.py 创建，存放用户挑选的 SVG）
+Picked/
