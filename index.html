@@ -110,6 +110,19 @@
     background: var(--accent);
     color: white;
   }
+  .theme-select {
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    font-size: 13px;
+    padding: 0 8px;
+    color: var(--text);
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .theme-select:focus { border-color: var(--accent); background: var(--panel); }
   aside {
     grid-area: sidebar;
     background: var(--panel);
@@ -252,14 +265,16 @@
     width: 100%;
   }
   .card.both .icon-frame {
-    width: 72px;
-    gap: 4px;
+    width: 88px;
+    gap: 3px;
     flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
   }
   .card.both .icon-frame img,
   .card.both .icon-frame .placeholder {
-    width: 32px;
-    height: 32px;
+    width: 26px;
+    height: 26px;
     object-fit: contain;
   }
   .empty {
@@ -298,8 +313,10 @@
   .detail-row .preview {
     display: flex;
     gap: 8px;
-    align-items: center;
+    align-items: flex-start;
     flex-shrink: 0;
+    flex-wrap: wrap;
+    max-width: 320px;
   }
   .detail-row .preview img {
     width: 56px;
@@ -465,15 +482,12 @@
 <body>
 <div class="app">
   <header>
-    <h1>Material Symbols 图标库</h1>
+    <h1 id="brand">图标库</h1>
+    <select id="themeSelect" class="theme-select"></select>
     <div class="search-wrap">
       <input id="search" type="search" placeholder="搜索图标名称（如 add, camera, arrow）..." autocomplete="off">
     </div>
-    <div class="variant-switch" id="variantSwitch">
-      <button data-variant="filled" class="active">填充</button>
-      <button data-variant="outline">描边</button>
-      <button data-variant="both">双形态</button>
-    </div>
+    <div class="variant-switch" id="variantSwitch"></div>
     <div class="stats" id="stats">加载中...</div>
   </header>
 
@@ -502,21 +516,25 @@
 <script>
 "use strict";
 
-const DATA_URL = "icons.json";
+const THEMES_URL = "themes.json";
 const PLACEHOLDER_SVG = "data:image/svg+xml;utf8," + encodeURIComponent(
   "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' fill='#f4f4f5'/></svg>"
 );
 
 const state = {
-  data: null,
+  themes: [],        // themes.json 清单
+  theme: "",         // 当前主题显示名
+  data: null,        // 当前主题的 icons-<theme>.json
   mode: "all",       // "all" | "category:<name>"
-  variant: "filled", // "filled" | "outline" | "both"
+  variant: null,     // 当前选中的 variant key；"all" = 显示全部形态
   query: "",
   filtered: [],
 };
 
 const el = {
   search: document.getElementById("search"),
+  brand: document.getElementById("brand"),
+  themeSelect: document.getElementById("themeSelect"),
   variantSwitch: document.getElementById("variantSwitch"),
   stats: document.getElementById("stats"),
   sidebar: document.getElementById("sidebar"),
@@ -547,8 +565,7 @@ const io = new IntersectionObserver((entries) => {
 
 function fillCard(card) {
   const name = card.dataset.name;
-  const filled = card.dataset.filled === "1";
-  const outline = card.dataset.outline === "1";
+  const files = JSON.parse(card.dataset.files || "{}");
   const variant = state.variant;
   const frame = card.querySelector(".icon-frame");
   frame.innerHTML = "";
@@ -564,18 +581,18 @@ function fillCard(card) {
     return img;
   }
 
-  if (variant === "filled" && filled) {
-    frame.appendChild(makeImg(card.dataset.filledFile, false));
-  } else if (variant === "outline" && outline) {
-    frame.appendChild(makeImg(card.dataset.outlineFile, true));
-  } else if (variant === "both") {
-    if (filled) frame.appendChild(makeImg(card.dataset.filledFile, false));
-    if (outline) frame.appendChild(makeImg(card.dataset.outlineFile, true));
-    if (!filled && !outline) frame.appendChild(makeImg(card.dataset.filledFile || card.dataset.outlineFile, false));
+  const variantKeys = (state.data && state.data.variants || []).map(v => v.key);
+
+  if (variant === "all") {
+    for (const k of variantKeys) {
+      if (files[k]) frame.appendChild(makeImg(files[k], k === "outline"));
+    }
+  } else if (files[variant]) {
+    frame.appendChild(makeImg(files[variant], variant === "outline"));
   } else {
-    // 当前变体不可用时回退到另一个
-    const file = card.dataset.filledFile || card.dataset.outlineFile;
-    if (file) frame.appendChild(makeImg(file, variant === "outline"));
+    // 当前形态不可用时回退到任意可用形态
+    const fb = variantKeys.find(k => files[k]);
+    if (fb) frame.appendChild(makeImg(files[fb], fb === "outline"));
   }
 }
 
@@ -614,14 +631,11 @@ function renderGrid(items) {
   for (const it of items) {
     const card = document.createElement("div");
     card.className = "card";
-    if (state.variant === "both") card.classList.add("both");
+    if (state.variant === "all") card.classList.add("both");
     card.dataset.name = it.name;
-    card.dataset.filled = it.filled ? "1" : "0";
-    card.dataset.outline = it.outline ? "1" : "0";
-    card.dataset.filledFile = it.filled || "";
-    card.dataset.outlineFile = it.outline || "";
+    card.dataset.files = JSON.stringify(it.files || {});
     card.dataset.loaded = "0";
-    card.title = it.name + (it.filled ? "" : " (仅描边)") + (it.outline ? "" : " (仅填充)");
+    card.title = it.name;
 
     const frame = document.createElement("div");
     frame.className = "icon-frame";
@@ -679,9 +693,11 @@ function toggleDetail(card, item) {
   // 大图预览（每个形态一个独立 item，各自带"添加备选"按钮）
   const preview = document.createElement("div");
   preview.className = "preview";
-  const variants = [];
-  if (item.filled) variants.push({ file: item.filled, label: item.outline ? "填充" : "" });
-  if (item.outline) variants.push({ file: item.outline, label: item.filled ? "描边" : "" });
+  const allVariants = state.data.variants || [];
+  const showLabels = allVariants.length > 1;
+  const variants = allVariants
+    .map(v => ({ file: (item.files && item.files[v.key]) || null, label: v.label }))
+    .filter(v => v.file);
   for (const v of variants) {
     const itemBlock = document.createElement("div");
     itemBlock.className = "preview-item";
@@ -692,7 +708,7 @@ function toggleDetail(card, item) {
     if (v.label === "描边") img.classList.add("is-outline");
     itemBlock.appendChild(img);
 
-    if (v.label) {
+    if (showLabels && v.label) {
       const tag = document.createElement("div");
       tag.className = "variant-tag";
       tag.textContent = v.label;
@@ -751,7 +767,7 @@ function toggleDetail(card, item) {
   const filesEl = document.createElement("div");
   filesEl.className = "files";
   // 路径里的目录前缀只显示一次，避免 "Material Symbols/x · Material Symbols/y" 重复
-  const paths = [item.filled, item.outline].filter(Boolean);
+  const paths = Object.values(item.files || {});
   const baseNames = paths.map(p => {
     const idx = p.lastIndexOf("/");
     return idx >= 0 ? p.slice(idx + 1) : p;
@@ -807,7 +823,7 @@ function toggleDetail(card, item) {
   copyBtn.textContent = "复制文件名";
   copyBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    const text = item.filled || item.outline || item.name;
+    const text = (item.files && Object.values(item.files)[0]) || item.name;
     navigator.clipboard?.writeText(text).then(() => {
       copyBtn.textContent = "已复制 ✓";
       setTimeout(() => copyBtn.textContent = "复制文件名", 1200);
@@ -918,6 +934,36 @@ function syncStickyHeight() {
 }
 window.addEventListener("resize", syncStickyHeight);
 
+// 形态切换器：按当前主题 data.variants 动态生成；末尾「全部」= 并排显示所有形态。
+// 单形态主题（variants.length <= 1）隐藏整个切换器。
+function renderVariantSwitcher() {
+  el.variantSwitch.innerHTML = "";
+  const variants = (state.data && state.data.variants) || [];
+  if (variants.length <= 1) {
+    el.variantSwitch.style.display = "none";
+    state.variant = variants[0] ? variants[0].key : "all";
+    return;
+  }
+  el.variantSwitch.style.display = "";
+  for (const v of variants) {
+    const b = document.createElement("button");
+    b.dataset.variant = v.key;
+    b.textContent = v.label;
+    el.variantSwitch.appendChild(b);
+  }
+  const allBtn = document.createElement("button");
+  allBtn.dataset.variant = "all";
+  allBtn.textContent = "全部";
+  el.variantSwitch.appendChild(allBtn);
+  // 选中：优先沿用 state.variant，否则默认第一个
+  let target = state.variant;
+  if (target !== "all" && !variants.some(v => v.key === target)) target = null;
+  const pick = target || variants[0].key;
+  state.variant = pick;
+  const btn = el.variantSwitch.querySelector(`button[data-variant="${pick}"]`);
+  if (btn) btn.classList.add("active");
+}
+
 // ============================================================
 // 侧栏分类
 // ============================================================
@@ -974,9 +1020,9 @@ el.variantSwitch.addEventListener("click", (e) => {
   el.variantSwitch.querySelectorAll("button").forEach(b => {
     b.classList.toggle("active", b === btn);
   });
-  // 变体变化后重新填充已渲染的卡片（不重建 DOM，避免抖动）
+  // 形态变化后重新填充已渲染的卡片（不重建 DOM，避免抖动）
   for (const card of el.grid.children) {
-    card.classList.toggle("both", state.variant === "both");
+    card.classList.toggle("both", state.variant === "all");
     card.dataset.loaded = "0";
     const frame = card.querySelector(".icon-frame");
     frame.innerHTML = "";
@@ -994,17 +1040,25 @@ function escapeHtml(s) {
 // ============================================================
 // 启动
 // ============================================================
-async function init() {
+async function loadTheme(file, themeName) {
   el.loading.classList.add("visible");
+  el.loading.textContent = "正在加载图标数据...";
+  el.loading.style.background = "";
+  el.loading.style.color = "";
   try {
-    const res = await fetch(DATA_URL);
+    const res = await fetch(file);
     if (!res.ok) throw new Error("HTTP " + res.status);
     state.data = await res.json();
+    state.theme = themeName;
+    el.brand.textContent = `${themeName} 图标库`;
     el.stats.textContent = `${state.data.total_icons} 个图标 · ${state.data.total_files} 个 SVG 文件 · 多标签`;
+    state.variant = null;
+    renderVariantSwitcher();
     renderSidebar();
     selectMode("all");
   } catch (err) {
-    el.loading.textContent = "加载失败: " + err.message + "（请通过本地 HTTP 服务器打开，例如 python -m http.server）";
+    el.loading.classList.add("visible");
+    el.loading.textContent = "加载失败: " + err.message;
     el.loading.style.background = "#fee2e2";
     el.loading.style.color = "#dc2626";
     console.error(err);
@@ -1012,6 +1066,37 @@ async function init() {
     el.loading.classList.remove("visible");
   }
 }
+
+async function init() {
+  el.loading.classList.add("visible");
+  try {
+    const res = await fetch(THEMES_URL);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    state.themes = await res.json();
+    el.themeSelect.innerHTML = "";
+    for (const t of state.themes) {
+      const opt = document.createElement("option");
+      opt.value = t.file;
+      opt.textContent = t.name;
+      if (t.default) opt.selected = true;
+      el.themeSelect.appendChild(opt);
+    }
+    const def = state.themes.find(t => t.default) || state.themes[0];
+    await loadTheme(def.file, def.name);
+  } catch (err) {
+    el.loading.classList.add("visible");
+    el.loading.textContent = "加载失败: " + err.message + "（请通过本地 HTTP 服务器打开，例如 python -m http.server）";
+    el.loading.style.background = "#fee2e2";
+    el.loading.style.color = "#dc2626";
+    console.error(err);
+  }
+}
+
+el.themeSelect.addEventListener("change", (e) => {
+  const file = e.target.value;
+  const t = state.themes.find(x => x.file === file);
+  loadTheme(file, t ? t.name : file);
+});
 
 init();
 </script>
