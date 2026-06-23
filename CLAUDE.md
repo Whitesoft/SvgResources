@@ -13,11 +13,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 python _build_index.py
 
 # 启动预览服务器（必须走 HTTP —— index.html 用了 fetch()，直接用 file:// 打开会被浏览器拦截）
-python -m http.server 8765 --bind 127.0.0.1
+python server.py
 # Windows 下的等价一键脚本：预览.bat
 ```
 
-没有测试、没有 lint、没有包管理器。`index.html` 和 `_build_index.py` 都零依赖。
+`server.py` 监听 `127.0.0.1:8765`，承担两件事：
+
+1. 静态文件服务（取代 `python -m http.server`）。
+2. 两个 POST 端点供前端调用：
+   - `POST /api/pick` — body `{ "file": "<项目根相对路径>" }`，把该 SVG 拷贝到 `Picked/`（运行时由 server 启动时创建，已在 `.gitignore` 中）。带路径白名单校验：`(ROOT / rel).resolve()` 后必须仍位于项目根下，否则 400。
+   - `POST /api/open-folder` — 用 `os.startfile` / `open` / `xdg-open` 在系统资源管理器里打开 `Picked/`。
+
+只想纯浏览、不需要备选功能时，仍可退回 `python -m http.server 8765 --bind 127.0.0.1`。
+
+没有测试、没有 lint、没有包管理器。`index.html`、`_build_index.py`、`server.py` 都零依赖。
 
 ## 架构
 
@@ -39,7 +48,7 @@ python -m http.server 8765 --bind 127.0.0.1
 
    输出 JSON 结构：`total_icons`、`total_files`、`categories[]`（每项含 `items`）、`alphabet[]`（A–Z/# 分组，供「全部」视图使用）、扁平的 `all[]`。
 
-3. **`index.html`** —— 整个预览应用是单个 HTML 文件，CSS/JS 全部内联。它只 `fetch` 一次 `icons.json`，之后所有渲染都在客户端完成。需要注意的点：
+3. **`index.html`** —— 整个预览应用是单个 HTML 文件，CSS/JS 全部内联。它只 `fetch` 一次 `icons.json`，之后所有渲染都在客户端完成；用户在详情条点击「添加备选 / 打开备选目录」时再向 `server.py` 的两个端点发 POST。需要注意的点：
    - **懒渲染**用 `IntersectionObserver`（`rootMargin: "200px"`）—— 这是必须的，因为网格里可能装下数千张卡片。每次 `renderGrid()` 重新渲染前都要 `io.disconnect()`。
    - **详情条**是独立的 sticky 元素，**不**插入网格 —— 这样才不会干扰 IntersectionObserver 对卡片的观察。
    - **sticky 高度同步**：`syncStickyHeight()` 把 sticky 容器的实际高度写入 CSS 变量 `--sticky-h`，让卡片的 `scroll-margin-top` 配合字母索引点击滚动后不会被遮挡。任何改变布局的操作后都要调用它。
