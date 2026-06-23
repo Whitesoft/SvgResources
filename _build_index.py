@@ -1,18 +1,60 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""扫描 SVG 目录，按主题关键词分类，生成 icons.json 供 index.html 懒加载使用。"""
+"""扫描各主题 SVG 目录，按主题关键词分类，每主题生成 icons-<theme>.json，
+并产出 themes.json 清单，供 index.html 懒加载与多主题切换使用。"""
 import json
 import os
 import re
 from collections import defaultdict
 
 SVG_DIR = os.path.dirname(os.path.abspath(__file__))
-OUT_JSON = os.path.join(SVG_DIR, "icons.json")
 
-# 图标主题子目录（支持以后扩展更多主题，例如 "Tabler Icons" 等）
-# 每项是 (子目录名, 显示用主题名)；脚本会扫描每个子目录下的 .svg 文件
-THEME_DIRS = [
-    ("Material Symbols", "Material Symbols"),
+# 主题配置：每项描述一个图标主题如何被解析。
+#   dir              — 子目录名
+#   name             — 显示用主题名
+#   file             — 输出 JSON 文件名
+#   default          — 是否默认主题（前端首次加载它）
+#   variants         — [(key, 中文标签, 结尾后缀正则)]；顺序重要：长后缀必须在前，
+#                      否则 -rounded.svg 会先吃掉 -outline-rounded.svg，
+#                      -bold.svg 会先吃掉 -bold-duotone.svg
+#   fallback_variant — 命中不了任何后缀时（如裸 foo.svg）归到这里
+#   categories       — None = 复用下面的 CATEGORIES；否则给一份该主题专属关键词
+THEMES = [
+    {
+        "dir": "Material Symbols", "name": "Material Symbols",
+        "file": "icons-material.json", "default": True,
+        "variants": [
+            ("outline", "描边", r"-outline-rounded\.svg$"),
+            ("filled",  "填充", r"-rounded\.svg$"),
+        ],
+        "fallback_variant": "filled",
+        "categories": None,
+    },
+    {
+        "dir": "Lucide", "name": "Lucide", "file": "icons-lucide.json",
+        "variants": [("default", "默认", r"\.svg$")],
+        "fallback_variant": "default",
+        "categories": None,
+    },
+    {
+        "dir": "Solar", "name": "Solar", "file": "icons-solar.json",
+        "variants": [
+            ("bold-duotone", "粗体双色", r"-bold-duotone\.svg$"),
+            ("line-duotone", "线性双色", r"-line-duotone\.svg$"),
+            ("bold",    "粗体", r"-bold\.svg$"),
+            ("broken",  "破碎", r"-broken\.svg$"),
+            ("linear",  "线性", r"-linear\.svg$"),
+            ("outline", "描边", r"-outline\.svg$"),
+        ],
+        "fallback_variant": "linear",
+        "categories": None,
+    },
+    {
+        "dir": "Tabler Icons", "name": "Tabler Icons", "file": "icons-tabler.json",
+        "variants": [("default", "默认", r"\.svg$")],
+        "fallback_variant": "default",
+        "categories": None,
+    },
 ]
 
 # 分类：每个分类是 (中文名, 关键词列表)。匹配按顺序进行，先匹配到的优先。
@@ -97,16 +139,7 @@ CATEGORIES = [
 ]
 
 
-def normalize(filename):
-    """从 'add-circle-outline-rounded.svg' 等返回 'add-circle'。"""
-    name = filename
-    name = re.sub(r"-outline-rounded\.svg$", "", name)
-    name = re.sub(r"-rounded\.svg$", "", name)
-    name = re.sub(r"\.svg$", "", name)
-    return name
-
-
-def match_categories(name):
+def match_categories(name, categories=CATEGORIES):
     """返回该 name 所属的所有分类中文名列表（多标签，去重保序）。未匹配返回空列表。
 
     匹配规则：
@@ -117,7 +150,7 @@ def match_categories(name):
     matched = []
     seen = set()
     wrapped = f"-{name}-"
-    for cat_name, keywords, mode in CATEGORIES:
+    for cat_name, keywords, mode in categories:
         hit = False
         if mode == "startswith_digit":
             if name and name[0].isdigit():
@@ -140,50 +173,49 @@ def match_categories(name):
     return matched
 
 
-def main():
-    # 收集所有主题子目录下的 .svg 文件
-    # 文件路径相对 SVG_DIR，形如 "Material Symbols/foo-rounded.svg"
-    all_files = []
-    for sub_name, _ in THEME_DIRS:
-        sub_dir = os.path.join(SVG_DIR, sub_name)
-        if not os.path.isdir(sub_dir):
-            continue
+def extract_variant(basename, variants, fallback_variant):
+    """返回 (variant_key, icon_name)。
+
+    按 variants 顺序试每个结尾后缀正则；第一个命中者决定 variant，
+    图标名 = 命中位置之前的子串（已同时去掉后缀与 .svg）。
+    都不命中则 variant=fallback_variant，图标名 = 去掉 .svg。
+    """
+    for key, _label, suffix_re in variants:
+        m = re.search(suffix_re, basename)
+        if m:
+            return key, basename[:m.start()]
+    return fallback_variant, re.sub(r"\.svg$", "", basename)
+
+
+def build_theme(theme):
+    """扫描单个主题目录，返回与原 icons.json 同构（但泛化）的结果字典。"""
+    sub_dir = os.path.join(SVG_DIR, theme["dir"])
+    variants_cfg = theme["variants"]
+    cats_cfg = theme["categories"] if theme["categories"] is not None else CATEGORIES
+
+    # 收集相对路径（正斜杠）
+    files = []
+    if os.path.isdir(sub_dir):
         for f in os.listdir(sub_dir):
             if f.endswith(".svg"):
-                # 用正斜杠，便于直接拼接 URL
-                all_files.append(f"{sub_name}/{f}")
-    files = all_files
+                files.append(f"{theme['dir']}/{f}")
 
-    # name -> {filled: ?, outline: ?}
+    # name -> {variant_key: relpath}
     by_name = defaultdict(dict)
-    for f in files:
-        basename = os.path.basename(f)
-        name = normalize(basename)
-        if basename.endswith("-outline-rounded.svg"):
-            by_name[name]["outline"] = f
-        elif basename.endswith("-rounded.svg"):
-            by_name[name]["filled"] = f
-        else:
-            # 其他命名兜底，归到 filled
-            by_name[name]["filled"] = f
+    for rel in files:
+        base = os.path.basename(rel)
+        vkey, name = extract_variant(base, variants_cfg, theme["fallback_variant"])
+        by_name[name][vkey] = rel
 
-    # 分类（多标签：一个图标可属于多个分类）
+    # 分类（多标签）
     categorized = defaultdict(list)
     uncategorized = []
-    categorized_names = set()  # 出现在至少一个分类的图标名
     for name in sorted(by_name.keys()):
-        cats = match_categories(name)
-        variants = by_name[name]
-        item = {
-            "name": name,
-            "filled": variants.get("filled"),
-            "outline": variants.get("outline"),
-        }
-        for cat in cats:
-            categorized[cat].append(item)
-        if cats:
-            categorized_names.add(name)
-        else:
+        cats = match_categories(name, cats_cfg)
+        item = {"name": name, "files": by_name[name]}
+        for c in cats:
+            categorized[c].append(item)
+        if not cats:
             uncategorized.append(item)
 
     # 按首字母分组（用于 All 索引）
@@ -192,46 +224,52 @@ def main():
         first = name[0].upper()
         if first.isdigit():
             first = "#"
-        alpha_groups[first].append({
-            "name": name,
-            "filled": by_name[name].get("filled"),
-            "outline": by_name[name].get("outline"),
-        })
+        alpha_groups[first].append({"name": name, "files": by_name[name]})
 
-    # 整理 categories 顺序，按 CATEGORIES 定义顺序，附加未分类
-    cat_order = [c[0] for c in CATEGORIES]
-    cats = []
+    # 整理 categories 顺序，按 cats_cfg 定义顺序，附加未分类
+    cat_order = [c[0] for c in cats_cfg]
+    cats_out = []
     for cn in cat_order:
         items = categorized.get(cn, [])
         if items:
-            cats.append({"name": cn, "count": len(items), "items": items})
+            cats_out.append({"name": cn, "count": len(items), "items": items})
     if uncategorized:
-        cats.append({"name": "其他", "count": len(uncategorized), "items": uncategorized})
+        cats_out.append({"name": "其他", "count": len(uncategorized), "items": uncategorized})
 
     alpha = [{"letter": k, "count": len(v), "items": v} for k, v in sorted(alpha_groups.items())]
 
-    result = {
+    return {
         "total_icons": len(by_name),
         "total_files": len(files),
         "total_labels": sum(len(v) for v in categorized.values()),
-        "categories": cats,
+        "variants": [{"key": k, "label": l} for k, l, _r in variants_cfg],
+        "categories": cats_out,
         "alphabet": alpha,
-        "all": [{"name": n, "filled": by_name[n].get("filled"), "outline": by_name[n].get("outline")} for n in sorted(by_name.keys())],
+        "all": [{"name": n, "files": by_name[n]} for n in sorted(by_name.keys())],
     }
 
-    with open(OUT_JSON, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False)
 
-    print(f"Total unique icons: {len(by_name)}")
-    print(f"Total SVG files: {len(files)}")
-    print(f"Categories:")
-    for c in cats:
-        print(f"  {c['name']}: {c['count']}")
-    print(f"Alphabet groups: {len(alpha)}")
-    print(f"Output: {OUT_JSON}")
-    # 文件大小
-    sz = os.path.getsize(OUT_JSON)
-    print(f"JSON size: {sz/1024:.1f} KB")
+def main():
+    manifest = []
+    for theme in THEMES:
+        result = build_theme(theme)
+        out_path = os.path.join(SVG_DIR, theme["file"])
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False)
+        manifest.append({
+            "name": theme["name"],
+            "file": theme["file"],
+            "default": bool(theme.get("default", False)),
+        })
+        sz = os.path.getsize(out_path)
+        print(f"[{theme['name']}] icons={result['total_icons']} files={result['total_files']} "
+              f"variants={len(result['variants'])} labels={result['total_labels']} "
+              f"-> {theme['file']} ({sz/1024:.1f} KB)")
+
+    manifest_path = os.path.join(SVG_DIR, "themes.json")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False)
+    print(f"Wrote {len(manifest)} themes -> themes.json")
 
 
 if __name__ == "__main__":
