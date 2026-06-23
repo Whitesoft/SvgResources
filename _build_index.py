@@ -5,7 +5,7 @@
 import json
 import os
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 SVG_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -209,13 +209,116 @@ def extract_variant(basename, variants, fallback_variant):
 # 不作为主题扫描的目录（备选区、文档、版本控制等）
 EXCLUDE_DIRS = {"Picked", "docs", ".git", ".claude"}
 
+# 已知「形态」关键词：出现在文件名末尾、表示风格而非图标名的一部分。
+# 仅当它们在整目录里大规模成簇出现（坍缩率高）时才认定为形态后缀，
+# 零星出现（如某主题里恰好有 foo 与 foo-bold 两个独立图标）不会触发误判。
+STYLE_KEYWORDS = {
+    "filled", "fill", "regular", "outline", "linear", "bold", "broken", "light",
+    "thin", "duotone", "solid", "twotone", "two-tone", "rounded", "sharp",
+    "line", "bulk", "monotone", "ghost", "alt",
+}
+STYLE_LABELS = {
+    "filled": "填充", "fill": "填充", "regular": "线性", "outline": "描边",
+    "linear": "线性", "bold": "粗体", "broken": "破碎", "light": "细线",
+    "thin": "特细", "duotone": "双色", "solid": "实心", "twotone": "双色",
+    "two-tone": "双色", "rounded": "圆角", "sharp": "锐利", "line": "线性",
+    "bulk": "体积", "monotone": "单色", "ghost": "幽灵", "alt": "变体",
+}
+# 判定为多形态的坍缩率门槛：base 名拥有 ≥2 个形态文件的比例需达到此值。
+COLLAPSE_THRESHOLD = 0.25
+# 走「数字尺寸+风格」分支的匹配率门槛：必须有相当比例的文件符合该模式，
+# 否则零星含数字的图标名（如 Solar 的 home-2-bold）会误触发。
+SIZE_MATCH_RATE = 0.6
+
+
+def _variant_label(variant_str):
+    """给形态串取中文标签：取其中首个已知关键词的标签，找不到就用原文。"""
+    for tok in variant_str.split("-"):
+        if tok in STYLE_LABELS:
+            return STYLE_LABELS[tok]
+    return variant_str
+
+
+def detect_variants(basenames):
+    """分析一组文件名，自动判断是否为多形态主题。
+
+    返回 (variants, fallback_variant)：
+      - variants = [(key, 中文标签, 后缀正则), ...]，按后缀长度降序排列
+        （长复合后缀优先匹配，避免 -rounded 抢先吃掉 -outline-rounded）；
+      - 判定为单形态时返回 (None, None)。
+
+    检测按优先级尝试两种模式，均不满足则视为单形态：
+      1) 数字尺寸 + 风格：<base>-<数字>-<风格>.svg（如 camera-24-filled）
+         —— 尾部 -数字- 几乎不可能是图标名的一部分，几乎无歧义，优先。
+      2) 末尾形态关键词：从尾部贪婪吃掉连续的已知关键词作为形态，
+         支持复合（outline-rounded / bold-duotone）。
+    两种模式都用「坍缩率」把关：只有大量图标能合并到同一 base 时才认定。
+    """
+    def collapse_rate(pairs):
+        bases = defaultdict(set)
+        for base, var in pairs:
+            bases[base].add(var)
+        if not bases:
+            return 0.0
+        return sum(1 for vs in bases.values() if len(vs) >= 2) / len(bases)
+
+    def with_default(variants, plain_count, fallback):
+        """若存在未被任何形态正则匹配的“无后缀”文件，追加一个放最后的“默认”形态
+        （正则 \\.svg$ 兜底），并让 fallback 指向它。这样如 Phosphor 的
+        airplane.svg（regular 无后缀）不会和 airplane-thin.svg 撞到同一形态槽。"""
+        if plain_count > 0:
+            variants = variants + [("default", "默认", r"\.svg$")]
+            return variants, "default"
+        return variants, fallback
+
+    # 候选 1：数字尺寸 + 风格 <base>-<尺寸>-<风格>.svg
+    # 关键：形态词必须显式属于已知风格集，否则名字里夹的数字会被误当尺寸
+    # （如 calendar-3-day-16-filled 里的 "3"）。显式风格锚定后，惰性匹配会落到
+    # 最后一个“真正的 尺寸-风格”上。
+    style_alt = "|".join(sorted(STYLE_KEYWORDS, key=len, reverse=True))
+    size_re = re.compile(rf"^(.*?)-(\d+)-({style_alt})\.svg$")
+    size_pairs = []
+    for b in basenames:
+        m = size_re.match(b)
+        if m:
+            size_pairs.append((m.group(1), m.group(3)))
+    if (size_pairs
+            and len(size_pairs) / len(basenames) >= SIZE_MATCH_RATE
+            and collapse_rate(size_pairs) >= COLLAPSE_THRESHOLD):
+        styles = sorted({v for _, v in size_pairs}, key=len, reverse=True)
+        variants = [(s, STYLE_LABELS.get(s, s), rf"-\d+-{re.escape(s)}\.svg$")
+                    for s in styles]
+        fallback = Counter(v for _, v in size_pairs).most_common(1)[0][0]
+        return with_default(variants, len(basenames) - len(size_pairs), fallback)
+
+    # 候选 2：末尾形态关键词（支持复合）
+    kw_pairs = []
+    matched = 0
+    for b in basenames:
+        name = b[:-4] if b.lower().endswith(".svg") else b
+        toks = name.split("-")
+        i = len(toks)
+        while i > 0 and toks[i - 1] in STYLE_KEYWORDS:
+            i -= 1
+        if i < len(toks):
+            kw_pairs.append(("-".join(toks[:i]), "-".join(toks[i:])))
+            matched += 1
+    if kw_pairs and collapse_rate(kw_pairs) >= COLLAPSE_THRESHOLD:
+        var_strs = sorted({v for _, v in kw_pairs}, key=len, reverse=True)
+        variants = [(v, _variant_label(v), rf"-{re.escape(v)}\.svg$")
+                    for v in var_strs]
+        fallback = Counter(v for _, v in kw_pairs).most_common(1)[0][0]
+        return with_default(variants, len(basenames) - matched, fallback)
+
+    return None, None
+
 
 def discover_extra_themes(curated_dirs):
     """自动发现：扫描 SVG_DIR 下未被 THEMES 收录、且含 .svg 的子目录，
-    作为单形态默认主题登记。
+    自动判定形态后登记为主题。
 
     这样“下载一个新图标集 → 丢进目录 → 重建索引”即可自动出现在预览页，
-    无需手工编辑 THEMES。多形态主题（Material/Solar/Fluent 等）仍需在 THEMES 显式配置。
+    无需手工编辑 THEMES——包括多形态主题（会由 detect_variants 自动识别）。
     """
     extra = []
     if not os.path.isdir(SVG_DIR):
@@ -226,19 +329,25 @@ def discover_extra_themes(curated_dirs):
             continue
         if not os.path.isdir(full):
             continue
-        # 至少含一个 .svg 才算图标集目录
         try:
-            has_svg = any(f.endswith(".svg") for f in os.listdir(full))
+            svgs = [f for f in os.listdir(full) if f.endswith(".svg")]
         except OSError:
-            has_svg = False
-        if not has_svg:
+            continue
+        if not svgs:
             continue
         slug = re.sub(r"[^a-z0-9]+", "-", entry.lower()).strip("-") or "extra"
+        variants, fallback = detect_variants(svgs)
+        if variants is None:
+            # 单形态主题
+            variants_cfg = [("default", "默认", r"\.svg$")]
+            fallback = "default"
+        else:
+            variants_cfg = variants
         extra.append({
             "dir": entry, "name": entry,
             "file": f"icons-{slug}.json",
-            "variants": [("default", "默认", r"\.svg$")],
-            "fallback_variant": "default",
+            "variants": variants_cfg,
+            "fallback_variant": fallback,
             "categories": None,
         })
     return extra

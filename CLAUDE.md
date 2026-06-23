@@ -43,7 +43,12 @@ python server.py
 
 2. **`_build_index.py` → `themes.json` + 各 `icons-<theme>.json`** —— 构建步骤。三件事必须理解：
    - `THEMES`：扩展新图标主题的入口，每项是一个主题配置（目录、显示名、输出文件名、形态后缀列表 `variants`、兜底形态、可选专属分类关键词）。形态由通用的「后缀优先」算法解析，item 形态泛化为 `files: {variantKey: 路径}`。**仅多形态主题**（Material/Solar/Fluent 等）需要在此显式配置。
-   - `discover_extra_themes()`：**自动发现**——扫描项目根下未被 `THEMES` 收录、排除 `Picked`/`docs`/`.git`/`.claude` 且含 `.svg` 的子目录，作为**单形态默认主题**登记。因此下载任何单形态图标集（如 Lucide/Tabler/Carbon 风格）只需放进目录再重建索引即可出现，无需改 `THEMES`。
+   - `discover_extra_themes()`：**自动发现**——扫描项目根下未被 `THEMES` 收录、排除 `Picked`/`docs`/`.git`/`.claude` 且含 `.svg` 的子目录，调用 `detect_variants()` 自动判定形态后登记。
+   - `detect_variants()`：**形态自动检测**。按优先级尝试两种模式，均用「坍缩率」（base 名拥有 ≥2 形态文件的比例）把关，达不到门槛就视为单形态：
+     1. 数字尺寸+风格 `<base>-<数字>-<风格>.svg`（如 Fluent 的 `camera-24-filled`）——形态词必须显式属于已知风格集，且匹配率需 ≥60%，避免名字里夹的数字（如 Solar 的 `home-2-bold`）误触发；
+     2. 末尾形态关键词（从尾部贪婪吃掉连续已知关键词，支持复合 `outline-rounded`/`bold-duotone`）。
+     检测到有无后缀文件（如 Phosphor 的 regular）时追加一个放最后的「默认」形态兜底。
+     因此**绝大多数主题（含多形态）下载后零配置即可正确入预览**；仅当风格词恰好是图标名一部分（不可从文件名消除的歧义）时才需手工登记。
    - `CATEGORIES`：默认分类关键词 `(中文分类名, 关键词列表, 匹配模式)`；各主题可在 `THEMES` 里用 `categories` 覆盖。一个图标可以同时落到**多个**分类（多标签）。匹配由 `match_categories()` 完成：
      - 以 `-` 结尾的关键词按前缀匹配词元（如 `ev-`、`key-`）；
      - 其他关键词按**完整词元**匹配（前后用 `-` 边界包裹），刻意规避子串误命中（例如不让 `ear` 命中 `gear`）；
@@ -60,7 +65,7 @@ python server.py
 ## 改这个仓库时
 
 - **新增图标**：把 `.svg` 按命名约定放进对应主题目录（如 `Material Symbols/`、`Lucide/`），然后 `python _build_index.py`。若用 `download_svg_from_Iconify.py` 下载，这一步会自动完成。
-- **新增一种主题**：**单形态**主题无需任何配置——新建目录、放入 `.svg`、跑构建即可（`discover_extra_themes` 会自动收录）。**多形态**主题（文件名带形态/尺寸后缀，需归并）才编辑 `_build_index.py` 的 `THEMES`，加一项（含 `dir`/`name`/`file`/`variants`/`fallback_variant`），然后 `python _build_index.py`。
+- **新增一种主题**：通常无需任何配置——新建目录、放入 `.svg`、跑构建即可（`discover_extra_themes` + `detect_variants` 会自动判定单/多形态）。仅当风格词与图标名产生不可消除的歧义、自动检测结果不理想时，才编辑 `_build_index.py` 的 `THEMES` 显式配置（含 `dir`/`name`/`file`/`variants`/`fallback_variant`），然后 `python _build_index.py`。
 - **新增一种分类**：编辑 `_build_index.py` 的 `CATEGORIES`，**不要**手改各 `icons-<theme>.json` —— 它们每次都会被整体重写。
 - **JSON 里的路径用正斜杠**（`Material Symbols/foo-rounded.svg`），这样能直接和文档基址 URL 拼接 —— 改构建脚本时要保留这一点。
 - `index.html`、`themes.json`、各 `icons-<theme>.json`、`预览.bat` 都已纳入版本管理，这样一份全新 checkout 不用跑构建就能预览；结构变化后要同步更新。
