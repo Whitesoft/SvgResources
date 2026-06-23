@@ -60,6 +60,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._send_json(400, {"ok": False, "error": "missing 'file' field"})
             return
         rel = data["file"]
+        if not isinstance(rel, str):
+            self._send_json(400, {"ok": False, "error": "'file' must be a string"})
+            return
         src = (ROOT / rel).resolve()
         try:
             src.relative_to(ROOT)
@@ -73,10 +76,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             PICKED_DIR.mkdir(exist_ok=True)
             dest = PICKED_DIR / src.name
             shutil.copy2(src, dest)
+            dest_rel = dest.relative_to(ROOT).as_posix()
         except Exception as e:
             self._send_json(500, {"ok": False, "error": str(e)})
             return
-        self._send_json(200, {"ok": True, "dest": "Picked/" + src.name})
+        self._send_json(200, {"ok": True, "dest": dest_rel})
 
     def _handle_open_folder(self):
         try:
