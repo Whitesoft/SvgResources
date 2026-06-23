@@ -696,7 +696,7 @@ function toggleDetail(card, item) {
   const allVariants = state.data.variants || [];
   const showLabels = allVariants.length > 1;
   const variants = allVariants
-    .map(v => ({ file: (item.files && item.files[v.key]) || null, label: v.label }))
+    .map(v => ({ key: v.key, file: (item.files && item.files[v.key]) || null, label: v.label }))
     .filter(v => v.file);
   for (const v of variants) {
     const itemBlock = document.createElement("div");
@@ -705,7 +705,7 @@ function toggleDetail(card, item) {
     const img = document.createElement("img");
     img.src = v.file;
     img.alt = item.name + (v.label ? " (" + v.label + ")" : "");
-    if (v.label === "描边") img.classList.add("is-outline");
+    if (v.key === "outline") img.classList.add("is-outline");
     itemBlock.appendChild(img);
 
     if (showLabels && v.label) {
