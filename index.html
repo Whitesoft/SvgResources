@@ -416,6 +416,31 @@
     cursor: pointer;
   }
   .detail-row .copy-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .detail-row .open-folder-btn {
+    padding: 4px 10px;
+    background: var(--hover);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .detail-row .open-folder-btn:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .detail-row .open-folder-btn.ok {
+    background: #dcfce7;
+    color: #15803d;
+    border-color: #15803d;
+  }
+  .detail-row .open-folder-btn.err {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #b91c1c;
+  }
   /* 滚动条 */
   aside::-webkit-scrollbar, main::-webkit-scrollbar { width: 8px; }
   aside::-webkit-scrollbar-thumb, main::-webkit-scrollbar-thumb {
@@ -799,6 +824,40 @@ function toggleDetail(card, item) {
     });
   });
   detailBar.appendChild(copyBtn);
+
+  // 打开备选目录按钮
+  const openBtn = document.createElement("button");
+  openBtn.className = "open-folder-btn";
+  openBtn.textContent = "打开备选目录";
+  openBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (openBtn.disabled) return;
+    const original = openBtn.textContent;
+    openBtn.disabled = true;
+    openBtn.textContent = "打开中...";
+    try {
+      const res = await fetch("/api/open-folder", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        openBtn.classList.add("ok");
+        openBtn.textContent = "已打开 ✓";
+      } else {
+        openBtn.classList.add("err");
+        openBtn.textContent = "失败";
+        console.error("open-folder failed:", data);
+      }
+    } catch (err) {
+      openBtn.classList.add("err");
+      openBtn.textContent = "失败";
+      console.error(err);
+    }
+    setTimeout(() => {
+      openBtn.classList.remove("ok", "err");
+      openBtn.textContent = original;
+      openBtn.disabled = false;
+    }, 1400);
+  });
+  detailBar.appendChild(openBtn);
 
   // 关闭按钮
   const closeBtn = document.createElement("button");
