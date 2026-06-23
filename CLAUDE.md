@@ -33,12 +33,11 @@ python server.py
 
 整体是一条单向的 **文件 → JSON → 浏览器** 流水线，由三个松耦合的组件组成：
 
-1. **`Material Symbols/*.svg`** —— 数据源。文件名约定是核心：
+1. **主题目录里的 `*.svg`** —— 数据源。各主题有自己的命名约定，例如 Material Symbols：
    - `<name>-rounded.svg` → 填充形态
    - `<name>-outline-rounded.svg` → 描边形态
    - 其他命名兜底归入填充。
-
-   `normalize()` 剥掉这些后缀，得到规范化的图标名，并把同名的两种形态配对到一起。
+   其他主题（Lucide/Solar/Tabler）各有自己的后缀约定。具体怎么从文件名解析出图标名与形态，见下面第 2 点的 `THEMES` 配置与「后缀优先」算法。
 
 2. **`_build_index.py` → `themes.json` + 各 `icons-<theme>.json`** —— 构建步骤。两件事必须理解：
    - `THEMES`：扩展新图标主题的入口，每项是一个主题配置（目录、显示名、输出文件名、形态后缀列表 `variants`、兜底形态、可选专属分类关键词）。形态由通用的「后缀优先」算法解析，item 形态泛化为 `files: {variantKey: 路径}`。
