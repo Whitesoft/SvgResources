@@ -665,20 +665,20 @@ function toggleDetail(card, item) {
   if (item.filled) variants.push({ file: item.filled, label: item.outline ? "填充" : "" });
   if (item.outline) variants.push({ file: item.outline, label: item.filled ? "描边" : "" });
   for (const v of variants) {
-    const item_block = document.createElement("div");
-    item_block.className = "preview-item";
+    const itemBlock = document.createElement("div");
+    itemBlock.className = "preview-item";
 
     const img = document.createElement("img");
     img.src = v.file;
     img.alt = item.name + (v.label ? " (" + v.label + ")" : "");
     if (v.label === "描边") img.classList.add("is-outline");
-    item_block.appendChild(img);
+    itemBlock.appendChild(img);
 
     if (v.label) {
       const tag = document.createElement("div");
       tag.className = "variant-tag";
       tag.textContent = v.label;
-      item_block.appendChild(tag);
+      itemBlock.appendChild(tag);
     }
 
     const addBtn = document.createElement("button");
@@ -686,8 +686,9 @@ function toggleDetail(card, item) {
     addBtn.textContent = v.label ? `添加${v.label}` : "添加备选";
     addBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
-      if (addBtn.classList.contains("ok") || addBtn.classList.contains("err")) return;
+      if (addBtn.disabled) return;
       const original = addBtn.textContent;
+      addBtn.disabled = true;
       addBtn.textContent = "添加中...";
       try {
         const res = await fetch("/api/pick", {
@@ -712,11 +713,12 @@ function toggleDetail(card, item) {
       setTimeout(() => {
         addBtn.classList.remove("ok", "err");
         addBtn.textContent = original;
+        addBtn.disabled = false;
       }, 1400);
     });
-    item_block.appendChild(addBtn);
+    itemBlock.appendChild(addBtn);
 
-    preview.appendChild(item_block);
+    preview.appendChild(itemBlock);
   }
   detailBar.appendChild(preview);
 
