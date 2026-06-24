@@ -61,9 +61,15 @@ THEMES = [
         "categories": None,
     },
     {
+        # Tabler Icons：默认形态是 outline（无后缀），另有 -filled 形态。
+        # 显式登记：1089/6378 ≈ 17% 的文件带 -filled，低于自动检测的坍缩门槛（25%），
+        # 会被误判为单形态。-off / -bit 等后缀属于图标名一部分，不会与之冲突。
         "dir": "Tabler Icons", "name": "Tabler Icons", "file": "icons-tabler.json",
-        "variants": [("default", "默认", r"\.svg$")],
-        "fallback_variant": "default",
+        "variants": [
+            ("filled",  "填充", r"-filled\.svg$"),
+            ("outline", "线性", r"\.svg$"),
+        ],
+        "fallback_variant": "outline",
         "categories": None,
     },
     {
@@ -362,6 +368,101 @@ COLLAPSE_THRESHOLD = 0.25
 # 否则零星含数字的图标名（如 Solar 的 home-2-bold）会误触发。
 SIZE_MATCH_RATE = 0.6
 
+# 官方分类名中英对照（来自 Iconify API 各 iconset 的 categories 键名）。
+# build_theme() 在使用官方分类输出时统一查表翻译；未命中保留原文。
+# 各主题共享同一份词典——这些英文名跨主题语义基本一致（weather / Weather 都是"天气"）。
+# 漏译不会出错，只会保留英文，便于未来新增主题时渐进补译。
+OFFICIAL_CATEGORY_LABELS = {
+    # —— 通用 / 跨主题高频 ——
+    "weather": "天气", "Weather": "天气",
+    "nature": "自然", "Nature": "自然", "Nature, Travel": "自然与旅行",
+    "animals": "动物", "Animal": "动物",
+    "arrows": "箭头", "Arrows": "箭头", "Arrow": "箭头",
+    "Arrows Action": "箭头动作",
+    "time": "时间", "Time": "时间", "Date / Time": "日期与时间",
+    "navigation": "导航", "Navigation": "导航",
+    "search": "搜索", "Search": "搜索",
+    "charts": "图表", "accessibility": "无障碍", "Accessibility": "无障碍",
+    "security": "安全", "Security": "安全", "Lock": "锁",
+    "settings": "设置", "Settings": "设置", "Settings, Fine Tuning": "设置与微调",
+    "mail": "邮件", "Mail": "邮件",
+    "food-beverage": "食品饮料", "Food / Drink": "食品饮料",
+    "Food": "食品", "Food, Kitchen": "食品与厨房",
+    "finance": "金融", "Finance": "金融", "finances": "金融",
+    "Money": "货币", "Banking": "银行", "Currency": "货币", "Crypto": "加密货币",
+    "shopping": "购物", "Shopping": "购物", "Shopping, Ecommerce": "购物与电商",
+    "commerce": "商业",
+    "business": "商务", "Business": "商务", "Business, Statistic": "商务与统计",
+    "maps": "地图", "Maps": "地图", "Map": "地图", "maps & travel": "地图与旅行",
+    "Map & Location": "地图与位置",
+    "transportation": "交通", "Transport": "交通", "Transport, Parts, Service": "交通与配件",
+    "Transit": "公共交通", "Travel": "旅行", "travel": "旅行",
+    "Automotive": "汽车", "Transportation + Flying": "交通-航空",
+    "Transportation + Road": "交通-道路", "Transportation + Water": "交通-水上",
+    "Transportation + Other": "交通-其他",
+    "medical": "医疗", "Medical / Hospital": "医疗与医院", "Medicine": "医药",
+    "health & wellness": "健康与养生", "Health & Medical": "健康与医疗",
+    "Health / Beauty": "健康与美容",
+    "people": "人物", "People / Family": "人物与家庭", "User": "用户", "Users": "用户",
+    "User & Faces": "用户与表情", "account": "账号", "Account / User": "账号与用户",
+    "Person": "人物", "Faces, Emotions, Stickers": "表情与贴纸", "Emoji": "表情",
+    "emoji": "表情",
+    "social": "社交", "Social": "社交", "Social Media": "社交媒体",
+    "communication": "通讯", "Communicate": "通讯", "Communication": "通讯",
+    "communications": "通讯", "Contact": "联系人",
+    "Messages, Conversation": "消息与对话", "Call": "通话",
+    "design": "设计", "Design": "设计", "Design, Tools": "设计与工具",
+    "Drawing / Art": "绘画与艺术",
+    "development": "开发", "Development": "开发",
+    "Developer / Languages": "开发与语言", "technology & development": "技术与开发",
+    "Network, IT, Programming": "网络与编程",
+    "devices": "设备", "Device": "设备", "Device / Tech": "设备与技术",
+    "Electronic, Devices": "电子设备", "Hardware": "硬件", "Hardware / Tools": "硬件与工具",
+    "Cellphone / Phone": "手机", "Audio": "音频", "Audio & Video": "音视频",
+    "Video / Movie": "视频与电影", "Video, Audio, Sound": "视频与音频",
+    "multimedia": "多媒体", "Media": "媒体", "media": "媒体",
+    "Music": "音乐",
+    "photography": "摄影", "Photography": "摄影", "Images": "图像",
+    "camera": "相机", "Camera": "相机",
+    "files": "文件", "File": "文件", "Files": "文件", "Files / Folders": "文件与文件夹",
+    "Folders": "文件夹", "Document": "文档",
+    "editor": "编辑", "Editor": "编辑", "Edit / Modify": "编辑与修改",
+    "text": "文字", "Text": "文字", "Text Formatting": "文字排版",
+    "Text / Content / Format": "文字与格式",
+    "layout": "布局", "Layout": "布局", "View": "视图",
+    "shapes": "形状", "Shape": "形状", "Vector": "矢量",
+    "math": "数学", "Math": "数学",
+    "science": "科学", "Science": "科学", "Astronomy": "天文",
+    "School": "学校", "Education": "教育",
+    "notifications": "通知", "Notifications": "通知", "Notification": "通知",
+    "Alert / Error": "警告与错误",
+    "games": "游戏", "gaming": "游戏", "Gaming / RPG": "游戏与角色扮演",
+    "Game & Sports": "游戏与运动", "sports": "运动", "Sport": "运动", "Sports": "运动",
+    "tools": "工具", "Tools": "工具",
+    "buildings": "建筑", "Buildings": "建筑", "Building": "建筑",
+    "Building, Infrastructure": "建筑与基础设施",
+    "home": "主页", "Home": "主页", "Home, Furniture": "家居与家具",
+    "Home Automation": "家庭自动化", "Household": "家庭用品",
+    "cursors": "光标",
+    "connectivity": "连接", "Cloud": "云", "Database": "数据库",
+    "Brand": "品牌", "Brand / Logo": "品牌与标识", "brands": "品牌",
+    "Logo": "标识", "Logos": "标识",
+    "Activities": "活动", "Actions": "操作", "UI Actions": "界面操作",
+    "Essentional, UI": "基础界面", "List": "列表", "Notes": "笔记",
+    "Arrange": "排列", "Tooltip": "工具提示", "Like": "点赞",
+    "Hands": "手势",
+    "Android": "安卓", "Battery": "电池", "Clothing": "服装",
+    "Color": "颜色",
+    "Printer": "打印机", "Religion": "宗教", "Holiday": "节日",
+    "Agriculture": "农业", "Alpha / Numeric": "字母与数字",
+    "Geographic Information System": "地理信息",
+    "Enterprise": "企业", "Organization": "组织", "Planning": "规划",
+    "objects": "物品", "office": "办公", "system": "系统", "System": "系统",
+    "Other": "其他", "Others": "其他", "Part": "部件", "Zodiac": "生肖",
+    "seasons": "季节", "sustainability": "可持续",
+    "Form": "表单", "Places": "场所", "Privacy": "隐私",
+}
+
 
 def _variant_label(variant_str):
     """给形态串取中文标签：取其中首个已知关键词的标签，找不到就用原文。"""
@@ -568,7 +669,8 @@ def build_theme(theme, manifest=None, refresh_categories=False):
     for cn in cat_order:
         items = categorized.get(cn, [])
         if items:
-            cats_out.append({"name": cn, "count": len(items), "items": items})
+            label = OFFICIAL_CATEGORY_LABELS.get(cn, cn) if official else cn
+            cats_out.append({"name": label, "count": len(items), "items": items})
     # 仅当主题拥有分类体系（cat_order 非空）时才追加"其他"承载离群图标。
     # categories: [] 显式表示"不分类"（如 Simple Icons 这种品牌 logo 集），
     # 此时全部图标只走字母索引，不再塞进一个巨大的"其他"分组里。
@@ -582,6 +684,7 @@ def build_theme(theme, manifest=None, refresh_categories=False):
         "total_files": len(files),
         "total_labels": sum(len(v) for v in categorized.values()),
         "variants": [{"key": k, "label": l} for k, l, _r in variants_cfg],
+        "default_variant": theme["fallback_variant"],
         "categories": cats_out,
         "alphabet": alpha,
         "all": [{"name": n, "files": by_name[n]} for n in sorted(by_name.keys())],

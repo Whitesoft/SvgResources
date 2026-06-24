@@ -612,6 +612,13 @@ function applyFilter() {
     const cat = state.data.categories.find(c => c.name === catName);
     items = cat ? cat.items : [];
   }
+  // 选中具体形态时（非"全部"），只保留拥有该形态文件的图标。
+  // 对于每个图标都有所有形态的主题（如 Material/Solar），这是 no-op；
+  // 但对 Tabler 这种"少数图标有 filled"的主题则是必要的，否则选中 filled 时
+  // 几千个仅有 outline 的图标会通过 fallback 仍以 outline 形态占据网格。
+  if (state.variant && state.variant !== "all") {
+    items = items.filter(it => it.files && it.files[state.variant]);
+  }
   if (q) {
     items = items.filter(it => it.name.indexOf(q) !== -1);
   }
@@ -958,10 +965,13 @@ function renderVariantSwitcher() {
   allBtn.dataset.variant = "all";
   allBtn.textContent = "全部";
   el.variantSwitch.appendChild(allBtn);
-  // 选中：优先沿用 state.variant，否则默认第一个
+  // 选中：优先沿用 state.variant，否则取主题的 default_variant（通常是覆盖面最广的形态，
+  // 如 Tabler 的 outline——5291 个图标里只有 1089 个有 filled，默认 filled 会只见一小撮），
+  // 都没有再退而取 variants[0]。
   let target = state.variant;
   if (target !== "all" && !variants.some(v => v.key === target)) target = null;
-  const pick = target || variants[0].key;
+  const dv = state.data.default_variant;
+  const pick = target || (dv && variants.some(v => v.key === dv) ? dv : variants[0].key);
   state.variant = pick;
   const btn = el.variantSwitch.querySelector(`button[data-variant="${pick}"]`);
   if (btn) btn.classList.add("active");
@@ -1023,17 +1033,9 @@ el.variantSwitch.addEventListener("click", (e) => {
   el.variantSwitch.querySelectorAll("button").forEach(b => {
     b.classList.toggle("active", b === btn);
   });
-  // 形态变化后重新填充已渲染的卡片（不重建 DOM，避免抖动）
-  for (const card of el.grid.children) {
-    card.classList.toggle("both", state.variant === "all");
-    card.dataset.loaded = "0";
-    const frame = card.querySelector(".icon-frame");
-    frame.innerHTML = "";
-    const ph = document.createElement("div");
-    ph.className = "placeholder";
-    frame.appendChild(ph);
-    io.observe(card);
-  }
+  // 形态变化时形态可用性也变化（如 Tabler 选 filled 时多数图标没有 filled），
+  // 必须重新过滤并重建网格，不能只就地补刷已渲染卡片。
+  applyFilter();
 });
 
 function escapeHtml(s) {
