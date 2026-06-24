@@ -24,8 +24,11 @@
 
 输出目录结构（文件夹名为图标集在网站上的显示名，如 "Tabler Icons"）：
   <output>/<显示名>/<icon>.svg
-  例如：./iconify-svg/Tabler Icons/home.svg
-       ./iconify-svg/Material Symbols/home-rounded.svg
+  例如：./Themes/Tabler Icons/home.svg
+       ./Themes/Material Symbols/home-rounded.svg
+
+默认输出到当前项目的 Themes/ 子目录，让根目录保持整洁；
+下载完成后会自动调用同目录下的 _build_index.py 重建预览索引。
 """
 
 from __future__ import annotations
@@ -217,20 +220,22 @@ def download_prefix(prefix: str, folder_name: str, output_root: Path,
     return (downloaded, skipped, failed)
 
 
-def rebuild_preview_index(output_root: Path):
+def rebuild_preview_index():
     """下载完成后自动重建本地预览索引（_build_index.py）。
 
-    仅当输出目录里存在 _build_index.py 时才执行——即只对 SvgResources 预览项目生效。
-    _build_index.py 会自动发现新增的图标集目录（见其中的 discover_extra_themes），
+    以脚本自身所在目录作为 SvgResources 项目根来找 _build_index.py——
+    这样无论 --output 指向哪里（默认是项目根下的 Themes/），都能正确触发重建。
+    _build_index.py 会自动发现 Themes/ 下新增的图标集目录（见其中的 discover_extra_themes），
     所以新下载的主题无需任何手工登记即可出现在预览页。
     """
-    build = output_root / "_build_index.py"
+    project_root = Path(__file__).resolve().parent
+    build = project_root / "_build_index.py"
     if not build.exists():
         return
     log("\n正在重建预览索引 (_build_index.py)...")
     try:
         subprocess.run([sys.executable, str(build)], check=True,
-                       cwd=str(output_root))
+                       cwd=str(project_root))
     except subprocess.CalledProcessError as e:
         log(f"  重建索引失败（不影响下载结果）：退出码 {e.returncode}")
     except Exception as e:
@@ -239,8 +244,8 @@ def rebuild_preview_index(output_root: Path):
 
 def main():
     parser = argparse.ArgumentParser(description="下载 Iconify SVG 图标集")
-    parser.add_argument("--output", "-o", default="./iconify-svg",
-                        help="输出根目录（每个图标集单独建子目录）")
+    parser.add_argument("--output", "-o", default="./Themes",
+                        help="输出根目录（每个图标集单独建子目录，默认 ./Themes）")
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--prefix", "-p", action="append", metavar="PREFIX",
                      help="要下载的图标集前缀，可重复指定多个 "
@@ -292,7 +297,7 @@ def main():
 
     # 下载完成后自动重建预览索引，让新图标集立即出现在预览页
     if not args.no_rebuild:
-        rebuild_preview_index(output_root)
+        rebuild_preview_index()
 
 
 if __name__ == "__main__":

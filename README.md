@@ -13,18 +13,24 @@
 
 ```
 SvgResources/
-├── Material Symbols/      # Material Symbols 主题源文件（.svg）
-├── Lucide/                # Lucide 主题源文件（.svg）
-├── Solar/                 # Solar 主题源文件（.svg）
-├── Tabler Icons/          # Tabler Icons 主题源文件（.svg）
-├── _build_index.py        # 扫描各主题 SVG 目录，生成 themes.json + 各 icons-<theme>.json
-├── themes.json            # 构建产物：主题清单，供 index.html 建主题下拉
-├── icons-material.json    # 构建产物：Material Symbols 图标元数据
-├── icons-lucide.json      # 构建产物：Lucide 图标元数据
-├── icons-solar.json       # 构建产物：Solar 图标元数据
-├── icons-tabler.json      # 构建产物：Tabler Icons 图标元数据
+├── Themes/                # 所有主题 SVG 源文件与构建产物 JSON 都收纳在此
+│   ├── Material Symbols/  # Material Symbols 主题源文件（.svg）
+│   ├── Lucide/            # Lucide 主题源文件（.svg）
+│   ├── Solar/             # Solar 主题源文件（.svg）
+│   ├── Tabler Icons/      # Tabler Icons 主题源文件（.svg）
+│   ├── Carbon/            # Carbon 主题源文件（.svg）
+│   ├── Fluent UI System Icons/  # Fluent UI 主题源文件（.svg）
+│   ├── themes.json        # 构建产物：主题清单，供 index.html 建主题下拉
+│   ├── icons-material.json   # 构建产物：Material Symbols 图标元数据
+│   ├── icons-lucide.json     # 构建产物：Lucide 图标元数据
+│   ├── icons-solar.json      # 构建产物：Solar 图标元数据
+│   ├── icons-tabler.json     # 构建产物：Tabler Icons 图标元数据
+│   ├── icons-carbon.json     # 构建产物：Carbon 图标元数据
+│   └── icons-fluent.json     # 构建产物：Fluent UI 图标元数据
+├── _build_index.py        # 扫描 Themes/ 下各主题 SVG，生成 Themes/themes.json + 各 icons-<theme>.json
 ├── index.html             # 纯静态预览界面（HTML + 内联 JS/CSS，无外部依赖）
 ├── server.py              # 本地预览服务器（静态服务 + /api/pick + /api/open-folder）
+├── download_svg_from_Iconify.py  # 从 Iconify 下载图标集到 Themes/ 下，并自动重建索引
 ├── 预览.bat               # 一键启动本地 HTTP 服务器并打开浏览器
 └── Picked/                # 运行时目录：用户挑选的 SVG（.gitignore 已忽略）
 ```
@@ -35,7 +41,7 @@ SvgResources/
 
 双击 `预览.bat`，脚本会在 `http://127.0.0.1:8765/` 启动一个本地 HTTP 服务器并自动打开浏览器。
 
-> 必须通过 HTTP 服务器访问，直接双击 `index.html` 打开（`file://` 协议）会被浏览器拦截 `themes.json` / `icons-<theme>.json` 的 `fetch` 请求。
+> 必须通过 HTTP 服务器访问，直接双击 `index.html` 打开（`file://` 协议）会被浏览器拦截 `Themes/themes.json` / `Themes/icons-<theme>.json` 的 `fetch` 请求。
 
 ### 方式二：手动启动
 
@@ -66,13 +72,13 @@ python _build_index.py
 2. 按各主题的 `variants` 形态后缀列表做「后缀优先」解析，把同一图标的多个形态合并为一个 item（形态泛化为 `files: {variantKey: 路径}`）；
 3. 根据分类关键词表（默认 `CATEGORIES`，各主题可用专属 `categories` 覆盖）把每个图标打上**一个或多个**分类标签；
 4. 按图标名首字母生成 A–Z 字母索引；
-5. 为每个主题输出一份 `icons-<theme>.json`，并汇总输出主题清单 `themes.json`。
+5. 为每个主题输出一份 `Themes/icons-<theme>.json`，并汇总输出主题清单 `Themes/themes.json`。
 
-> 不再生成单一 `icons.json`；前端启动时先读 `themes.json` 建主题下拉，切换主题时再读对应的 `icons-<theme>.json`。
+> 不再生成单一 `icons.json`；前端启动时先读 `Themes/themes.json` 建主题下拉，切换主题时再读对应的 `Themes/icons-<theme>.json`。
 
 ## 添加新图标
 
-1. 把 SVG 文件按对应主题的命名规范放入相应主题目录（如 `Material Symbols/`、`Lucide/`）。
+1. 把 SVG 文件按对应主题的命名规范放入相应主题目录（如 `Themes/Material Symbols/`、`Themes/Lucide/`）。
 2. 运行 `python _build_index.py` 重建索引。
 3. 刷新浏览器即可看到新图标。
 

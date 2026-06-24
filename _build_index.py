@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """扫描各主题 SVG 目录，按主题关键词分类，每主题生成 icons-<theme>.json，
-并产出 themes.json 清单，供 index.html 懒加载与多主题切换使用。"""
+并产出 themes.json 清单，供 index.html 懒加载与多主题切换使用。
+
+所有主题 SVG 目录与生成的 JSON 都收纳在项目根下的 Themes/ 子目录里，
+保持项目根整洁；JSON 内记录的 SVG 路径**相对 Themes/**（不带 Themes/ 前缀），
+前端 fetch 与 /api/pick 时再显式拼上 Themes/。
+"""
 import json
 import os
 import re
 from collections import Counter, defaultdict
 
-SVG_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+THEMES_DIR = os.path.join(ROOT_DIR, "Themes")
 
 # 主题配置：每项描述一个图标主题如何被解析。
 #   dir              — 子目录名
@@ -314,17 +320,17 @@ def detect_variants(basenames):
 
 
 def discover_extra_themes(curated_dirs):
-    """自动发现：扫描 SVG_DIR 下未被 THEMES 收录、且含 .svg 的子目录，
+    """自动发现：扫描 THEMES_DIR 下未被 THEMES 收录、且含 .svg 的子目录，
     自动判定形态后登记为主题。
 
-    这样“下载一个新图标集 → 丢进目录 → 重建索引”即可自动出现在预览页，
+    这样“下载一个新图标集 → 丢进 Themes/ → 重建索引”即可自动出现在预览页，
     无需手工编辑 THEMES——包括多形态主题（会由 detect_variants 自动识别）。
     """
     extra = []
-    if not os.path.isdir(SVG_DIR):
+    if not os.path.isdir(THEMES_DIR):
         return extra
-    for entry in sorted(os.listdir(SVG_DIR)):
-        full = os.path.join(SVG_DIR, entry)
+    for entry in sorted(os.listdir(THEMES_DIR)):
+        full = os.path.join(THEMES_DIR, entry)
         if entry.startswith(".") or entry in EXCLUDE_DIRS or entry in curated_dirs:
             continue
         if not os.path.isdir(full):
@@ -355,7 +361,7 @@ def discover_extra_themes(curated_dirs):
 
 def build_theme(theme):
     """扫描单个主题目录，返回与原 icons.json 同构（但泛化）的结果字典。"""
-    sub_dir = os.path.join(SVG_DIR, theme["dir"])
+    sub_dir = os.path.join(THEMES_DIR, theme["dir"])
     variants_cfg = theme["variants"]
     cats_cfg = theme["categories"] if theme["categories"] is not None else CATEGORIES
 
@@ -419,13 +425,14 @@ def build_theme(theme):
 
 
 def main():
+    os.makedirs(THEMES_DIR, exist_ok=True)
     # THEMES = 显式配置的多形态/精选主题；再拼接自动发现的单形态主题
     all_themes = THEMES + discover_extra_themes({t["dir"] for t in THEMES})
 
     manifest = []
     for theme in all_themes:
         result = build_theme(theme)
-        out_path = os.path.join(SVG_DIR, theme["file"])
+        out_path = os.path.join(THEMES_DIR, theme["file"])
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False)
         manifest.append({
@@ -436,12 +443,12 @@ def main():
         sz = os.path.getsize(out_path)
         print(f"[{theme['name']}] icons={result['total_icons']} files={result['total_files']} "
               f"variants={len(result['variants'])} labels={result['total_labels']} "
-              f"-> {theme['file']} ({sz/1024:.1f} KB)")
+              f"-> Themes/{theme['file']} ({sz/1024:.1f} KB)")
 
-    manifest_path = os.path.join(SVG_DIR, "themes.json")
+    manifest_path = os.path.join(THEMES_DIR, "themes.json")
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False)
-    print(f"Wrote {len(manifest)} themes -> themes.json")
+    print(f"Wrote {len(manifest)} themes -> Themes/themes.json")
 
 
 if __name__ == "__main__":

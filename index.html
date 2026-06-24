@@ -516,7 +516,10 @@
 <script>
 "use strict";
 
-const THEMES_URL = "themes.json";
+const THEMES_URL = "Themes/themes.json";
+// 所有主题 SVG 与 icons-*.json 都收纳在项目根的 Themes/ 子目录下；
+// JSON 内记录的 SVG 路径相对 Themes/，所以 fetch 与 /api/pick 都要拼上此前缀。
+const THEMES_DIR = "Themes/";
 const PLACEHOLDER_SVG = "data:image/svg+xml;utf8," + encodeURIComponent(
   "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' fill='#f4f4f5'/></svg>"
 );
@@ -572,7 +575,7 @@ function fillCard(card) {
 
   function makeImg(file, isOutline) {
     const img = document.createElement("img");
-    img.src = file;
+    img.src = THEMES_DIR + file;
     img.alt = name;
     img.title = name;
     img.loading = "lazy";
@@ -703,7 +706,7 @@ function toggleDetail(card, item) {
     itemBlock.className = "preview-item";
 
     const img = document.createElement("img");
-    img.src = v.file;
+    img.src = THEMES_DIR + v.file;
     img.alt = item.name + (v.label ? " (" + v.label + ")" : "");
     if (v.key === "outline") img.classList.add("is-outline");
     itemBlock.appendChild(img);
@@ -728,7 +731,7 @@ function toggleDetail(card, item) {
         const res = await fetch("/api/pick", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ file: v.file }),
+          body: JSON.stringify({ file: THEMES_DIR + v.file }),
         });
         const data = await res.json();
         if (res.ok && data.ok) {
@@ -1046,7 +1049,7 @@ async function loadTheme(file, themeName) {
   el.loading.style.background = "";
   el.loading.style.color = "";
   try {
-    const res = await fetch(file);
+    const res = await fetch(THEMES_DIR + file);
     if (!res.ok) throw new Error("HTTP " + res.status);
     state.data = await res.json();
     state.theme = themeName;

@@ -4,15 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目是什么
 
-一个**搜集主题 SVG 图标并提供本地预览**的自包含工具集。内置六套主题：Google Material Symbols、Lucide、Solar、Tabler Icons、Carbon、Fluent UI System Icons。运行时是纯静态的 HTML/JS，唯一的构建步骤是一个 Python 脚本，把各主题 SVG 目录扫描成多份 JSON 索引（每主题一份，外加一份主题清单）。
+一个**搜集主题 SVG 图标并提供本地预览**的自包含工具集。内置六套主题：Google Material Symbols、Lucide、Solar、Tabler Icons、Carbon、Fluent UI System Icons。运行时是纯静态的 HTML/JS，唯一的构建步骤是一个 Python 脚本，把 `Themes/` 下各主题 SVG 目录扫描成多份 JSON 索引（每主题一份，外加一份主题清单）。
 
-`download_svg_from_Iconify.py` 负责从 Iconify 拉取图标集（文件夹名取网站显示名）；下载完成后**自动调用 `_build_index.py` 重建索引**（加 `--no-rebuild` 可跳过），所以新下载的图标集会立即出现在预览页，无需手工登记。
+所有主题 SVG 源目录与生成的 JSON 都收纳在项目根下的 `Themes/` 子目录里，根目录只保留脚本与界面文件。`download_svg_from_Iconify.py` 负责从 Iconify 拉取图标集（默认输出到 `Themes/`，文件夹名取网站显示名）；下载完成后**自动调用 `_build_index.py` 重建索引**（加 `--no-rebuild` 可跳过），所以新下载的图标集会立即出现在预览页，无需手工登记。
 
 ## 常用命令
 
 ```bash
 # 重建图标索引（新增/删除/重命名 SVG 文件，或修改 THEMES/CATEGORIES 后都要跑一次）
-# 产物：themes.json（主题清单）+ 各 icons-<theme>.json；不再生成单一 icons.json
+# 产物：Themes/themes.json（主题清单）+ 各 Themes/icons-<theme>.json；不再生成单一 icons.json
 python _build_index.py
 
 # 启动预览服务器（必须走 HTTP —— index.html 用了 fetch()，直接用 file:// 打开会被浏览器拦截）
@@ -41,7 +41,7 @@ python server.py
    - 其他命名兜底归入填充。
    其他主题（Lucide/Solar/Tabler）各有自己的后缀约定。具体怎么从文件名解析出图标名与形态，见下面第 2 点的 `THEMES` 配置与「后缀优先」算法。
 
-2. **`_build_index.py` → `themes.json` + 各 `icons-<theme>.json`** —— 构建步骤。三件事必须理解：
+2. **`_build_index.py` → `Themes/themes.json` + 各 `Themes/icons-<theme>.json`** —— 构建步骤。三件事必须理解：
    - `THEMES`：扩展新图标主题的入口，每项是一个主题配置（目录、显示名、输出文件名、形态后缀列表 `variants`、兜底形态、可选专属分类关键词）。形态由通用的「后缀优先」算法解析，item 形态泛化为 `files: {variantKey: 路径}`。**仅多形态主题**（Material/Solar/Fluent 等）需要在此显式配置。
    - `discover_extra_themes()`：**自动发现**——扫描项目根下未被 `THEMES` 收录、排除 `Picked`/`docs`/`.git`/`.claude` 且含 `.svg` 的子目录，调用 `detect_variants()` 自动判定形态后登记。
    - `detect_variants()`：**形态自动检测**。按优先级尝试两种模式，均用「坍缩率」（base 名拥有 ≥2 形态文件的比例）把关，达不到门槛就视为单形态：
@@ -56,7 +56,7 @@ python server.py
 
    输出 JSON 结构：`total_icons`、`total_files`、`categories[]`（每项含 `items`）、`alphabet[]`（A–Z/# 分组，供「全部」视图使用）、扁平的 `all[]`。
 
-3. **`index.html`** —— 整个预览应用是单个 HTML 文件，CSS/JS 全部内联。启动时先 `fetch` 一次 `themes.json` 建主题下拉，切换主题时再 `fetch` 对应的 `icons-<theme>.json`；之后所有渲染都在客户端完成；用户在详情条点击「添加备选 / 打开备选目录」时再向 `server.py` 的两个端点发 POST。需要注意的点：
+3. **`index.html`** —— 整个预览应用是单个 HTML 文件，CSS/JS 全部内联。启动时先 `fetch` 一次 `Themes/themes.json` 建主题下拉，切换主题时再 `fetch` 对应的 `Themes/icons-<theme>.json`；之后所有渲染都在客户端完成；用户在详情条点击「添加备选 / 打开备选目录」时再向 `server.py` 的两个端点发 POST。需要注意的点：
    - **懒渲染**用 `IntersectionObserver`（`rootMargin: "200px"`）—— 这是必须的，因为网格里可能装下数千张卡片。每次 `renderGrid()` 重新渲染前都要 `io.disconnect()`。
    - **详情条**是独立的 sticky 元素，**不**插入网格 —— 这样才不会干扰 IntersectionObserver 对卡片的观察。
    - **sticky 高度同步**：`syncStickyHeight()` 把 sticky 容器的实际高度写入 CSS 变量 `--sticky-h`，让卡片的 `scroll-margin-top` 配合字母索引点击滚动后不会被遮挡。任何改变布局的操作后都要调用它。
@@ -64,8 +64,8 @@ python server.py
 
 ## 改这个仓库时
 
-- **新增图标**：把 `.svg` 按命名约定放进对应主题目录（如 `Material Symbols/`、`Lucide/`），然后 `python _build_index.py`。若用 `download_svg_from_Iconify.py` 下载，这一步会自动完成。
-- **新增一种主题**：通常无需任何配置——新建目录、放入 `.svg`、跑构建即可（`discover_extra_themes` + `detect_variants` 会自动判定单/多形态）。仅当风格词与图标名产生不可消除的歧义、自动检测结果不理想时，才编辑 `_build_index.py` 的 `THEMES` 显式配置（含 `dir`/`name`/`file`/`variants`/`fallback_variant`），然后 `python _build_index.py`。
-- **新增一种分类**：编辑 `_build_index.py` 的 `CATEGORIES`，**不要**手改各 `icons-<theme>.json` —— 它们每次都会被整体重写。
-- **JSON 里的路径用正斜杠**（`Material Symbols/foo-rounded.svg`），这样能直接和文档基址 URL 拼接 —— 改构建脚本时要保留这一点。
-- `index.html`、`themes.json`、各 `icons-<theme>.json`、`预览.bat` 都已纳入版本管理，这样一份全新 checkout 不用跑构建就能预览；结构变化后要同步更新。
+- **新增图标**：把 `.svg` 按命名约定放进 `Themes/` 下对应主题目录（如 `Themes/Material Symbols/`、`Themes/Lucide/`），然后 `python _build_index.py`。若用 `download_svg_from_Iconify.py` 下载，这一步会自动完成（默认输出到 `Themes/`）。
+- **新增一种主题**：通常无需任何配置——在 `Themes/` 下新建目录、放入 `.svg`、跑构建即可（`discover_extra_themes` + `detect_variants` 会自动判定单/多形态）。仅当风格词与图标名产生不可消除的歧义、自动检测结果不理想时，才编辑 `_build_index.py` 的 `THEMES` 显式配置（含 `dir`/`name`/`file`/`variants`/`fallback_variant`），然后 `python _build_index.py`。
+- **新增一种分类**：编辑 `_build_index.py` 的 `CATEGORIES`，**不要**手改各 `Themes/icons-<theme>.json` —— 它们每次都会被整体重写。
+- **JSON 里的路径相对 `Themes/`**（`Material Symbols/foo-rounded.svg`，不带 `Themes/` 前缀），前端 `fetch` 与 `/api/pick` 时再显式拼上 `Themes/` —— 改构建脚本时要保留这一点。
+- `index.html`、`Themes/themes.json`、各 `Themes/icons-<theme>.json`、`预览.bat` 都已纳入版本管理，这样一份全新 checkout 不用跑构建就能预览；结构变化后要同步更新。
