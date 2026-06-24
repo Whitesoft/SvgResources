@@ -42,6 +42,23 @@ THEMES = [
         "categories": None,
     },
     {
+        # Material Design Icons（Pictogrammers 社区版，区别于 Google 官方的 Material Symbols）：
+        # 主形态是裸名（填充，如 account.svg），另有 -outline 描边形态（account-outline.svg）。
+        # 必须显式登记：3679/14001 ≈ 26% 的文件带 -outline，但裸名主形态无后缀，
+        # detect_variants 的坍缩率统计只把带后缀的文件计入，每个 base 只统计到 1 个形态，
+        # 坍缩率≈0，达不到门槛，会被误判为单形态（与 Tabler/Phosphor 同类问题）。
+        # 其余 -bold/-light/-line 等尾词是个位数到几十个，是真实图标名（如 format-bold），
+        # 不是形态，故不纳入 variants，让它们落到默认填充槽。
+        "dir": "Material Design Icons", "name": "Material Design Icons",
+        "file": "icons-material-design-icons.json",
+        "variants": [
+            ("outline", "描边", r"-outline\.svg$"),
+            ("filled",  "填充", r"\.svg$"),
+        ],
+        "fallback_variant": "filled",
+        "categories": None,
+    },
+    {
         "dir": "Lucide", "name": "Lucide", "file": "icons-lucide.json",
         "variants": [("default", "默认", r"\.svg$")],
         "fallback_variant": "default",

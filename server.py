@@ -25,6 +25,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
+    def end_headers(self):
+        # 静态 JSON 索引（Themes/*.json）默认走 SimpleHTTPRequestHandler，
+        # 只有 Last-Modified、无 Cache-Control，浏览器会做启发式缓存，
+        # 导致重建索引后前端仍读到旧 JSON（如旧的单形态配置）。这里对 .json
+        # 强制 no-store，保证每次刷新都拿到最新索引。
+        if self.path.endswith(".json"):
+            self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
     def _send_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
