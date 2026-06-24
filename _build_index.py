@@ -85,6 +85,16 @@ THEMES = [
         "fallback_variant": "regular",
         "categories": None,
     },
+    {
+        # Simple Icons 是品牌 logo 集，每个 slug 对应唯一品牌（无形态）。
+        # 显式登记成单形态、空分类：避免自动检测把品牌名 Outline/Linear/Solid/Ghost 等
+        # 误判为形态后缀；品牌天然按字母索引查找，不需要关键词分类。
+        "dir": "Simple Icons", "name": "Simple Icons",
+        "file": "icons-simple-icons.json",
+        "variants": [("default", "默认", r"\.svg$")],
+        "fallback_variant": "default",
+        "categories": [],
+    },
 ]
 
 # 分类：每个分类是 (中文名, 关键词列表)。匹配按顺序进行，先匹配到的优先。
@@ -511,13 +521,16 @@ def build_theme(theme, manifest=None, refresh_categories=False):
             first = "#"
         alpha_groups[first].append({"name": name, "files": by_name[name]})
 
-    # 整理 categories 顺序：官方按 API 返回顺序，关键词按定义顺序，最后附加"其他"
+    # 整理 categories 顺序：官方按 API 返回顺序，关键词按定义顺序
     cats_out = []
     for cn in cat_order:
         items = categorized.get(cn, [])
         if items:
             cats_out.append({"name": cn, "count": len(items), "items": items})
-    if uncategorized:
+    # 仅当主题拥有分类体系（cat_order 非空）时才追加"其他"承载离群图标。
+    # categories: [] 显式表示"不分类"（如 Simple Icons 这种品牌 logo 集），
+    # 此时全部图标只走字母索引，不再塞进一个巨大的"其他"分组里。
+    if uncategorized and cat_order:
         cats_out.append({"name": "其他", "count": len(uncategorized), "items": uncategorized})
 
     alpha = [{"letter": k, "count": len(v), "items": v} for k, v in sorted(alpha_groups.items())]
