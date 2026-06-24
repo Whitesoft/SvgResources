@@ -220,6 +220,35 @@ def download_prefix(prefix: str, folder_name: str, output_root: Path,
     return (downloaded, skipped, failed)
 
 
+def update_manifest(prefix_map: dict, output_root: Path):
+    """把 {prefix: 显示名} 合并到 Themes/_iconify-manifest.json（{显示名: prefix}）。
+
+    让 _build_index.py 在构建时能反查"主题目录名 -> Iconify prefix"，
+    进而启用官方分类。文件不存在则创建，已存在则合并（保留手工编辑过的项）。
+    输出根目录默认是项目根下的 Themes/，但即便 -o 指到别处，
+    manifest 仍写到 SvgResources 项目根的 Themes/ 下，确保唯一真相源。
+    """
+    project_root = Path(__file__).resolve().parent
+    manifest_path = project_root / "Themes" / "_iconify-manifest.json"
+    existing: dict = {}
+    if manifest_path.exists():
+        try:
+            existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
+    changed = False
+    for prefix, name in prefix_map.items():
+        if existing.get(name) != prefix:
+            existing[name] = prefix
+            changed = True
+    if changed:
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(
+            json.dumps(existing, ensure_ascii=False, indent=2),
+            encoding="utf-8")
+        log(f"已更新 {manifest_path.name}（共 {len(existing)} 项）")
+
+
 def rebuild_preview_index():
     """下载完成后自动重建本地预览索引（_build_index.py）。
 
@@ -274,6 +303,9 @@ def main():
 
     # 按前缀排序，保证下载顺序稳定
     items = sorted(prefix_map.items())
+
+    # 先把 {prefix: 显示名} 合并到 _iconify-manifest.json，让构建脚本能反查 prefix
+    update_manifest(prefix_map, output_root)
 
     log(f"\n将下载 {len(items)} 个图标集，输出到 {output_root.resolve()}")
     for prefix, name in items:

@@ -10,10 +10,15 @@
 import json
 import os
 import re
+import sys
 from collections import Counter, defaultdict
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen, Request
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 THEMES_DIR = os.path.join(ROOT_DIR, "Themes")
+MANIFEST_PATH = os.path.join(THEMES_DIR, "_iconify-manifest.json")
+CAT_CACHE_DIR = os.path.join(THEMES_DIR, "_iconify-categories")
 
 # 主题配置：每项描述一个图标主题如何被解析。
 #   dir              — 子目录名
@@ -164,6 +169,75 @@ CATEGORIES = [
 ]
 
 
+def load_manifest():
+    """加载 folder_name -> iconify prefix 映射。文件缺失或损坏返回空 dict。"""
+    if not os.path.isfile(MANIFEST_PATH):
+        return {}
+    try:
+        with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def fetch_official_categories(prefix):
+    """从 Iconify API 拉取某 prefix 的分类信息（/collection?prefix=X 的子集）。"""
+    url = f"https://api.iconify.design/collection?prefix={prefix}"
+    req = Request(url, headers={"User-Agent": "SvgResourcesIndexBuilder/1.0"})
+    with urlopen(req, timeout=30) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    return {
+        "prefix": prefix,
+        "total": data.get("total", 0),
+        "categories": data.get("categories", {}),
+        "uncategorized": data.get("uncategorized", []),
+        "aliases": data.get("aliases", {}),
+    }
+
+
+def load_official_categories(prefix, refresh=False):
+    """返回 (cat_order, name_to_cats) 或 None。
+
+    cat_order     —— 官方分类名的原始顺序（用于稳定展示）
+    name_to_cats  —— {icon_name: [cat1, cat2, ...]}，已展开别名映射
+
+    缓存命中规则：默认读 Themes/_iconify-categories/<prefix>.json；
+    refresh=True 或缓存不存在则联网拉取并写盘。
+    若该 prefix 没有官方分类（categories 为空）返回 None，调用方回退到关键词匹配。
+    """
+    if not prefix:
+        return None
+    os.makedirs(CAT_CACHE_DIR, exist_ok=True)
+    cache_path = os.path.join(CAT_CACHE_DIR, f"{prefix}.json")
+    data = None
+    if not refresh and os.path.isfile(cache_path):
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            data = None
+    if data is None:
+        try:
+            data = fetch_official_categories(prefix)
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+        except (HTTPError, URLError, OSError) as e:
+            print(f"  [warn] 拉取 {prefix} 官方分类失败：{e}")
+            return None
+    cats = data.get("categories", {})
+    if not cats:
+        return None
+    name_to_cats = {}
+    for cat_name, icons in cats.items():
+        for icon in icons:
+            name_to_cats.setdefault(icon, []).append(cat_name)
+    # 别名展开：alias 继承 real 名的分类
+    for alias, real in data.get("aliases", {}).items():
+        if real in name_to_cats:
+            name_to_cats[alias] = name_to_cats[real]
+    return list(cats.keys()), name_to_cats
+
+
 def match_categories(name, categories=CATEGORIES):
     """返回该 name 所属的所有分类中文名列表（多标签，去重保序）。未匹配返回空列表。
 
@@ -269,7 +343,7 @@ def detect_variants(basenames):
         return sum(1 for vs in bases.values() if len(vs) >= 2) / len(bases)
 
     def with_default(variants, plain_count, fallback):
-        """若存在未被任何形态正则匹配的“无后缀”文件，追加一个放最后的“默认”形态
+        """若存在未被任何形态正则匹配的"无后缀"文件，追加一个放最后的"默认"形态
         （正则 \\.svg$ 兜底），并让 fallback 指向它。这样如 Phosphor 的
         airplane.svg（regular 无后缀）不会和 airplane-thin.svg 撞到同一形态槽。"""
         if plain_count > 0:
@@ -280,7 +354,7 @@ def detect_variants(basenames):
     # 候选 1：数字尺寸 + 风格 <base>-<尺寸>-<风格>.svg
     # 关键：形态词必须显式属于已知风格集，否则名字里夹的数字会被误当尺寸
     # （如 calendar-3-day-16-filled 里的 "3"）。显式风格锚定后，惰性匹配会落到
-    # 最后一个“真正的 尺寸-风格”上。
+    # 最后一个"真正的 尺寸-风格"上。
     style_alt = "|".join(sorted(STYLE_KEYWORDS, key=len, reverse=True))
     size_re = re.compile(rf"^(.*?)-(\d+)-({style_alt})\.svg$")
     size_pairs = []
@@ -323,7 +397,7 @@ def discover_extra_themes(curated_dirs):
     """自动发现：扫描 THEMES_DIR 下未被 THEMES 收录、且含 .svg 的子目录，
     自动判定形态后登记为主题。
 
-    这样“下载一个新图标集 → 丢进 Themes/ → 重建索引”即可自动出现在预览页，
+    这样"下载一个新图标集 → 丢进 Themes/ → 重建索引"即可自动出现在预览页，
     无需手工编辑 THEMES——包括多形态主题（会由 detect_variants 自动识别）。
     """
     extra = []
@@ -359,14 +433,26 @@ def discover_extra_themes(curated_dirs):
     return extra
 
 
-def build_theme(theme):
-    """扫描单个主题目录，返回与原 icons.json 同构（但泛化）的结果字典。"""
+def build_theme(theme, manifest=None, refresh_categories=False):
+    """扫描单个主题目录，返回与原 icons.json 同构（但泛化）的结果字典。
+
+    分类优先级：
+      1) 主题目录在 manifest 里有 prefix，且该 prefix 拥有非空官方分类 → 用官方分类
+      2) 否则用 cats_cfg（主题专属关键词或全局 CATEGORIES）做关键词匹配
+    """
+    if manifest is None:
+        manifest = load_manifest()
     sub_dir = os.path.join(THEMES_DIR, theme["dir"])
     variants_cfg = theme["variants"]
     cats_cfg = theme["categories"] if theme["categories"] is not None else CATEGORIES
 
+    # 尝试加载官方分类
+    prefix = manifest.get(theme["dir"])
+    official = load_official_categories(prefix, refresh=refresh_categories) if prefix else None
+    classify_source = "official" if official else "keyword"
+
     # 收集相对路径（正斜杠）。排序以保证构建确定性；
-    # 对多文件合并到同一图标名的主题（如 Fluent UI 的多尺寸），排序后“后赋值者胜”，
+    # 对多文件合并到同一图标名的主题（如 Fluent UI 的多尺寸），排序后"后赋值者胜"，
     # 尺寸按文件名升序处理，最终保留最大尺寸的源文件（矢量缩放后视觉一致）。
     files = []
     if os.path.isdir(sub_dir):
@@ -385,13 +471,37 @@ def build_theme(theme):
     # 分类（多标签）
     categorized = defaultdict(list)
     uncategorized = []
-    for name in sorted(by_name.keys()):
-        cats = match_categories(name, cats_cfg)
-        item = {"name": name, "files": by_name[name]}
-        for c in cats:
-            categorized[c].append(item)
-        if not cats:
-            uncategorized.append(item)
+    if official:
+        cat_order, name_to_cats = official
+        # Iconify API 的图标名通常带形态后缀（如 solar 的 "home-bold"、
+        # mingcute 的 "home-line"），而 build 这边把后缀剥离成 name="home"。
+        # 所以反查分类时要用各形态的原始文件名（去 .svg）来匹配，任一命中即采用。
+        for name in sorted(by_name.keys()):
+            vfiles = by_name[name]
+            cats = None
+            for rel in vfiles.values():
+                stem = os.path.basename(rel)[:-4]  # 去 .svg
+                if stem in name_to_cats:
+                    cats = name_to_cats[stem]
+                    break
+            # 兜底：再试一次剥离后的 name（mdi / carbon 这类单形态主题用得上）
+            if cats is None and name in name_to_cats:
+                cats = name_to_cats[name]
+            item = {"name": name, "files": vfiles}
+            if cats:
+                for c in cats:
+                    categorized[c].append(item)
+            else:
+                uncategorized.append(item)
+    else:
+        cat_order = [c[0] for c in cats_cfg]
+        for name in sorted(by_name.keys()):
+            cats = match_categories(name, cats_cfg)
+            item = {"name": name, "files": by_name[name]}
+            for c in cats:
+                categorized[c].append(item)
+            if not cats:
+                uncategorized.append(item)
 
     # 按首字母分组（用于 All 索引）
     alpha_groups = defaultdict(list)
@@ -401,8 +511,7 @@ def build_theme(theme):
             first = "#"
         alpha_groups[first].append({"name": name, "files": by_name[name]})
 
-    # 整理 categories 顺序，按 cats_cfg 定义顺序，附加未分类
-    cat_order = [c[0] for c in cats_cfg]
+    # 整理 categories 顺序：官方按 API 返回顺序，关键词按定义顺序，最后附加"其他"
     cats_out = []
     for cn in cat_order:
         items = categorized.get(cn, [])
@@ -421,21 +530,24 @@ def build_theme(theme):
         "categories": cats_out,
         "alphabet": alpha,
         "all": [{"name": n, "files": by_name[n]} for n in sorted(by_name.keys())],
+        "classify_source": classify_source,
     }
 
 
 def main():
     os.makedirs(THEMES_DIR, exist_ok=True)
+    refresh = "--refresh-categories" in sys.argv
+    manifest = load_manifest()
     # THEMES = 显式配置的多形态/精选主题；再拼接自动发现的单形态主题
     all_themes = THEMES + discover_extra_themes({t["dir"] for t in THEMES})
 
-    manifest = []
+    manifest_out = []
     for theme in all_themes:
-        result = build_theme(theme)
+        result = build_theme(theme, manifest=manifest, refresh_categories=refresh)
         out_path = os.path.join(THEMES_DIR, theme["file"])
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False)
-        manifest.append({
+        manifest_out.append({
             "name": theme["name"],
             "file": theme["file"],
             "default": bool(theme.get("default", False)),
@@ -443,12 +555,13 @@ def main():
         sz = os.path.getsize(out_path)
         print(f"[{theme['name']}] icons={result['total_icons']} files={result['total_files']} "
               f"variants={len(result['variants'])} labels={result['total_labels']} "
+              f"classify={result['classify_source']} "
               f"-> Themes/{theme['file']} ({sz/1024:.1f} KB)")
 
     manifest_path = os.path.join(THEMES_DIR, "themes.json")
     with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, ensure_ascii=False)
-    print(f"Wrote {len(manifest)} themes -> Themes/themes.json")
+        json.dump(manifest_out, f, ensure_ascii=False)
+    print(f"Wrote {len(manifest_out)} themes -> Themes/themes.json")
 
 
 if __name__ == "__main__":
