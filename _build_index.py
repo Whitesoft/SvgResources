@@ -86,6 +86,48 @@ THEMES = [
         "categories": None,
     },
     {
+        # Phosphor 6 种粗细：thin/light/regular/bold/fill/duotone。
+        # 必须显式登记：贪婪检测会把 dot-outline-duotone / ghost-fill / sharp-bold
+        # 这类"图标名恰好含风格词"的文件误判成复合形态（之前误生成 36 个）。
+        # regular 是无后缀的兜底形态，用 \.svg$ 在最后兜住。
+        "dir": "Phosphor", "name": "Phosphor", "file": "icons-phosphor.json",
+        "variants": [
+            ("thin",    "特细", r"-thin\.svg$"),
+            ("light",   "细线", r"-light\.svg$"),
+            ("bold",    "粗体", r"-bold\.svg$"),
+            ("fill",    "填充", r"-fill\.svg$"),
+            ("duotone", "双色", r"-duotone\.svg$"),
+            ("regular", "常规", r"\.svg$"),
+        ],
+        "fallback_variant": "regular",
+        "categories": None,
+    },
+    {
+        # MingCute 仅 line/fill 两种形态。显式登记避免 line-fill / chart-line-fill
+        # 等"图标名含风格词"的文件被误判成 14 个虚假复合形态。
+        "dir": "MingCute Icon", "name": "MingCute Icon",
+        "file": "icons-mingcute-icon.json",
+        "variants": [
+            ("line", "线性", r"-line\.svg$"),
+            ("fill", "填充", r"-fill\.svg$"),
+        ],
+        "fallback_variant": "line",
+        "categories": None,
+    },
+    {
+        # Remix Icon 主形态 line/fill；Logos 分类下的品牌图标没有形态后缀，
+        # 用 default 兜底（之前误判 14 个虚假复合形态）。
+        "dir": "Remix Icon", "name": "Remix Icon",
+        "file": "icons-remix-icon.json",
+        "variants": [
+            ("line",    "线性", r"-line\.svg$"),
+            ("fill",    "填充", r"-fill\.svg$"),
+            ("default", "默认", r"\.svg$"),
+        ],
+        "fallback_variant": "default",
+        "categories": None,
+    },
+    {
         # Simple Icons 是品牌 logo 集，每个 slug 对应唯一品牌（无形态）。
         # 显式登记成单形态、空分类：避免自动检测把品牌名 Outline/Linear/Solid/Ghost 等
         # 误判为形态后缀；品牌天然按字母索引查找，不需要关键词分类。
